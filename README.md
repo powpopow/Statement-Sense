@@ -29,6 +29,14 @@ Everything is parsed **in your browser**. The PDF never leaves your machine.
    for someone else stays out of your totals, and a *Paid for others* tile adds
    up what each person owes you. The owner is saved in the sheet and in backups.
 
+7. **Catch duplicates.** Importing the same statement or screenshot twice adds
+   nothing: rows already stored are skipped, one-for-one, so two genuine
+   ฿45 7-Eleven purchases on one day both survive. Rows that look like one
+   already imported from *another* file (same day and amount, near-identical
+   text — OCR noise, or overlapping scroll screenshots) are kept but tagged
+   *possible duplicate*, with a filter in Transactions. Nothing is deleted for
+   you, because two real purchases can look alike too.
+
 ## Quick start
 
 ```bash

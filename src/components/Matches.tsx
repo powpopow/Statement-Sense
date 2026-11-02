@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { lookAlikeOrders } from '../lib/duplicates'
 import { applyOwner, ownerOf, sharedOwner, usePeople } from '../lib/people'
 import { OwnerSelect } from './OwnerSelect'
 import { AUTO_MATCH_THRESHOLD, findMatches } from '../lib/matching'
@@ -10,6 +11,7 @@ import type { MatchCandidate } from '../lib/types'
 export function Matches({ store }: { store: AppStore }) {
   const { transactions, orders } = store
   const { people, addPerson } = usePeople(transactions, orders)
+  const lookAlikes = useMemo(() => lookAlikeOrders(orders), [orders])
 
   const unmatchedOrders = useMemo(() => orders.filter((o) => !o.matchedTransactionId), [orders])
   const unmatchedTransactions = useMemo(
@@ -202,6 +204,17 @@ export function Matches({ store }: { store: AppStore }) {
                     </td>
                     <td>
                       {order.description}
+                      {lookAlikes.has(order.id) && (
+                        <>
+                          {' '}
+                          <span
+                            className="pill"
+                            title={`Looks like “${lookAlikes.get(order.id)!.description.slice(0, 40)}” from ${lookAlikes.get(order.id)!.sourceFile}. If it is the same order read twice, delete one.`}
+                          >
+                            possible duplicate
+                          </span>
+                        </>
+                      )}
                       <div className="small muted">
                         {order.sourceFile}
                         {order.orderRef && ` · ${order.orderRef}`}

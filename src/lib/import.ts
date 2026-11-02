@@ -160,25 +160,5 @@ export async function importFile(
   }
 }
 
-/** Drop rows that duplicate something already stored. */
-export function dedupeTransactions(existing: Transaction[], incoming: Transaction[]): Transaction[] {
-  const seen = new Set(
-    existing.map((t) => `${t.date}|${t.amount.toFixed(2)}|${t.description.slice(0, 40).toUpperCase()}`),
-  )
-  return incoming.filter((t) => {
-    const key = `${t.date}|${t.amount.toFixed(2)}|${t.description.slice(0, 40).toUpperCase()}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-}
-
-export function dedupeOrders(existing: Order[], incoming: Order[]): Order[] {
-  const seen = new Set(existing.map((o) => o.orderRef ?? `${o.date}|${o.amount.toFixed(2)}|${o.platform}`))
-  return incoming.filter((o) => {
-    const key = o.orderRef ?? `${o.date}|${o.amount.toFixed(2)}|${o.platform}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-}
+// Duplicate handling lives in duplicates.ts; re-exported so callers keep one import.
+export { dedupeOrders, dedupeTransactions } from './duplicates'

@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { importFile, dedupeOrders, dedupeTransactions, type ImportKind, type ImportOutcome } from '../lib/import'
+import { lookAlikeOrders, lookAlikeTransactions } from '../lib/duplicates'
 import { formatMoney } from '../lib/money'
 import type { AppStore } from '../lib/store'
 import { openOcrSession, type OcrSession } from '../lib/extract'
@@ -84,6 +85,23 @@ export function Upload({ store, onDone }: Props) {
 
         nextTransactions = [...nextTransactions, ...freshTransactions]
         nextOrders = [...nextOrders, ...freshOrders]
+
+        // Not identical, but the same day and amount with near-identical text from
+        // another file: probably one row read twice. Imported, but pointed out.
+        const txLooks = lookAlikeTransactions(nextTransactions)
+        const orderLooks = lookAlikeOrders(nextOrders)
+        const maybeTx = freshTransactions.filter((t) => txLooks.has(t.id)).length
+        const maybeOrders = freshOrders.filter((o) => orderLooks.has(o.id)).length
+        if (maybeTx) {
+          outcome.warnings.push(
+            `${maybeTx} imported row${maybeTx === 1 ? '' : 's'} look${maybeTx === 1 ? 's' : ''} like one already imported from another file. Check Transactions → Possible duplicates.`,
+          )
+        }
+        if (maybeOrders) {
+          outcome.warnings.push(
+            `${maybeOrders} imported order${maybeOrders === 1 ? '' : 's'} look${maybeOrders === 1 ? 's' : ''} like one already imported. Check Order matching for the “possible duplicate” tag.`,
+          )
+        }
         results.push({
           ...outcome,
           transactions: freshTransactions,

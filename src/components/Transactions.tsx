@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { lookAlikeTransactions } from '../lib/duplicates'
 import { formatMoney } from '../lib/money'
 import { formatDate } from '../lib/thaiDate'
 import { CATEGORIES, type Category, type Transaction } from '../lib/types'
@@ -10,17 +11,20 @@ type SortKey = 'date' | 'amount' | 'description' | 'category'
 
 export function Transactions({ store }: { store: AppStore }) {
   const [query, setQuery] = useState('')
-  const [category, setCategory] = useState<Category | 'all' | 'flagged'>('all')
+  const [category, setCategory] = useState<Category | 'all' | 'flagged' | 'duplicates'>('all')
   const [whose, setWhose] = useState<string>('all')
   const { people, addPerson } = usePeople(store.transactions, store.orders)
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [ascending, setAscending] = useState(false)
+
+  const lookAlikes = useMemo(() => lookAlikeTransactions(store.transactions), [store.transactions])
 
   const rows = useMemo(() => {
     const q = query.trim().toUpperCase()
     const filtered = store.transactions.filter((t) => {
       if (q && !t.description.toUpperCase().includes(q) && !t.sourceFile.toUpperCase().includes(q)) return false
       if (whose !== 'all' && ownerOf(t) !== whose) return false
+      if (category === 'duplicates') return lookAlikes.has(t.id)
       if (category === 'flagged') return t.confidence < 0.7 || t.category === 'Uncategorized'
       if (category !== 'all' && t.category !== category) return false
       return true
@@ -30,7 +34,7 @@ export function Transactions({ store }: { store: AppStore }) {
       if (sortKey === 'amount') return (a.amount - b.amount) * direction
       return String(a[sortKey]).localeCompare(String(b[sortKey])) * direction
     })
-  }, [store.transactions, query, category, whose, sortKey, ascending])
+  }, [store.transactions, lookAlikes, query, category, whose, sortKey, ascending])
 
   const total = rows.reduce((s, t) => s + Math.max(0, t.amount), 0)
 
@@ -89,9 +93,15 @@ export function Transactions({ store }: { store: AppStore }) {
             onChange={(e) => setQuery(e.target.value)}
             style={{ minWidth: 200 }}
           />
-          <select value={category} onChange={(e) => setCategory(e.target.value as Category | 'all' | 'flagged')}>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value as Category | 'all' | 'flagged' | 'duplicates')}
+          >
             <option value="all">All categories</option>
             <option value="flagged">Needs a look</option>
+            {(lookAlikes.size > 0 || category === 'duplicates') && (
+              <option value="duplicates">Possible duplicates ({lookAlikes.size})</option>
+            )}
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {c}
@@ -128,6 +138,7 @@ export function Transactions({ store }: { store: AppStore }) {
                 <Row
                   key={t.id}
                   transaction={t}
+                  lookAlike={lookAlikes.get(t.id)}
                   people={people}
                   onCategory={setCategoryFor}
                   onOwner={setOwnerFor}
@@ -151,6 +162,7 @@ export function Transactions({ store }: { store: AppStore }) {
 
 function Row({
   transaction,
+  lookAlike,
   people,
   onCategory,
   onOwner,
@@ -158,6 +170,8 @@ function Row({
   onRemove,
 }: {
   transaction: Transaction
+  /** Another row from a different file that looks like this one. */
+  lookAlike?: Transaction
   people: string[]
   onCategory: (id: string, c: Category) => void
   onOwner: (id: string, name: string) => void
@@ -173,6 +187,17 @@ function Row({
       <td>
         {transaction.confidence < 0.7 && <span className="flag" title="Low confidence — please check" />}
         {transaction.description}
+        {lookAlike && (
+          <>
+            {' '}
+            <span
+              className="pill"
+              title={`Looks like “${lookAlike.description.slice(0, 40)}” from ${lookAlike.sourceFile}. If it is the same row read twice, delete one.`}
+            >
+              possible duplicate
+            </span>
+          </>
+        )}
         <div className="small muted">
           {transaction.sourceFile}
           {transaction.foreignCurrency && ` · ${transaction.foreignCurrency}`}

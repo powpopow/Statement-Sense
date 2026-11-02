@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { formatMoney } from '../lib/money'
 import { ME, ownerOf, peopleFrom } from '../lib/people'
+import { merchantLabel, netBy, totalsOf } from '../lib/summary'
 import type { Transaction } from '../lib/types'
 import { BarChart, ColumnChart, type Datum } from './charts'
 
@@ -42,22 +43,15 @@ export function Summary({ transactions: all }: { transactions: Transaction[] }) 
     [transactions, month],
   )
 
-  const spend = scoped.filter((t) => t.amount > 0)
-  const income = scoped.filter((t) => t.amount < 0)
-  const totalSpend = spend.reduce((s, t) => s + t.amount, 0)
-  const totalIncome = income.reduce((s, t) => s - t.amount, 0)
+  // Spending is purchases less refunds; rewards sit beside it and card payments
+  // are neither (see lib/summary.ts).
+  const totals = useMemo(() => totalsOf(scoped), [scoped])
+  const totalSpend = totals.net
   const flagged = scoped.filter((t) => t.confidence < 0.7).length
-  const uncategorized = spend.filter((t) => t.category === 'Uncategorized')
+  const uncategorized = scoped.filter((t) => t.amount > 0 && t.category === 'Uncategorized')
 
   const byCategory = useMemo<Datum[]>(() => {
-    const totals = new Map<string, { value: number; count: number }>()
-    for (const t of spend) {
-      const entry = totals.get(t.category) ?? { value: 0, count: 0 }
-      entry.value += t.amount
-      entry.count += 1
-      totals.set(t.category, entry)
-    }
-    const sorted = [...totals.entries()].sort((a, b) => b[1].value - a[1].value)
+    const sorted = netBy(scoped, (t) => t.category).map((g) => [g.key, g] as const)
     // Past eight slots the palette stops being distinguishable, so fold the
     // tail into one bar rather than inventing colours.
     const head = sorted.slice(0, SERIES_SLOTS)
@@ -80,18 +74,13 @@ export function Summary({ transactions: all }: { transactions: Transaction[] }) 
       })
     }
     return data
-  }, [spend, totalSpend])
+  }, [scoped, totalSpend])
 
   const byMonth = useMemo<Datum[]>(() => {
-    const totals = new Map<string, number>()
-    for (const t of transactions.filter((x) => x.amount > 0)) {
-      const key = t.date.slice(0, 7)
-      totals.set(key, (totals.get(key) ?? 0) + t.amount)
-    }
-    return [...totals.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
+    return netBy(transactions, (t) => t.date.slice(0, 7))
+      .sort((a, b) => a.key.localeCompare(b.key))
       .slice(-12)
-      .map(([key, value]) => ({
+      .map(({ key, value }) => ({
         label: monthLabel(key),
         value: Math.round(value),
         color: 'var(--series-1)',
@@ -100,17 +89,11 @@ export function Summary({ transactions: all }: { transactions: Transaction[] }) 
   }, [transactions, month])
 
   const topMerchants = useMemo(() => {
-    const totals = new Map<string, { value: number; count: number }>()
-    for (const t of spend) {
-      // Collapse the trailing reference numbers banks append to merchant names.
-      const key = t.description.replace(/\s*\d{4,}\s*$/, '').slice(0, 44).trim() || t.description
-      const entry = totals.get(key) ?? { value: 0, count: 0 }
-      entry.value += t.amount
-      entry.count += 1
-      totals.set(key, entry)
-    }
-    return [...totals.entries()].sort((a, b) => b[1].value - a[1].value).slice(0, 8)
-  }, [spend])
+    // Net of refunds, so points redeemed against a merchant offset that merchant.
+    return netBy(scoped, (t) => merchantLabel(t.description))
+      .slice(0, 8)
+      .map((g) => [g.key, { value: g.value, count: g.count }] as const)
+  }, [scoped])
 
   // What you paid for other people, in the chosen period: the amount to ask for.
   const forOthers = useMemo(() => {
@@ -168,24 +151,27 @@ export function Summary({ transactions: all }: { transactions: Transaction[] }) 
 
       <div className="tiles" style={{ marginBottom: 16 }}>
         <div className="tile">
-          <div className="label">Total spend</div>
+          <div className="label">Spend</div>
           <div className="value">{formatMoney(totalSpend)}</div>
           <div className="sub">
-            {spend.length} transaction{spend.length === 1 ? '' : 's'}
+            {totals.purchaseCount} purchase{totals.purchaseCount === 1 ? '' : 's'}
+            {totals.refunded > 0 && ` · after ${formatMoney(totals.refunded)} refunded`}
             {dayCount && ` · ${formatMoney(totalSpend / dayCount)} a day`}
           </div>
         </div>
         <div className="tile">
-          <div className="label">Money in</div>
-          <div className="value">{formatMoney(totalIncome)}</div>
-          <div className="sub">{income.length} credits, refunds and transfers in</div>
+          <div className="label">Rewards</div>
+          <div className="value">{formatMoney(totals.rewards)}</div>
+          <div className="sub">
+            {totals.rewardCount} cashback or reward credit{totals.rewardCount === 1 ? '' : 's'}
+          </div>
         </div>
         <div className="tile">
-          <div className="label">Net</div>
-          <div className="value" style={{ color: totalIncome - totalSpend >= 0 ? 'var(--good)' : 'var(--critical)' }}>
-            {formatMoney(totalIncome - totalSpend)}
+          <div className="label">Paid to your cards</div>
+          <div className="value">{formatMoney(totals.payments)}</div>
+          <div className="sub">
+            {totals.paymentCount} payment{totals.paymentCount === 1 ? '' : 's'} · not spending, not income
           </div>
-          <div className="sub">{month === 'all' ? 'Across everything imported' : monthLabel(month)}</div>
         </div>
         {whose === ME && forOthers.length > 0 && (
           <div className="tile">
@@ -206,7 +192,7 @@ export function Summary({ transactions: all }: { transactions: Transaction[] }) 
       <div className="card">
         <div className="card-head">
           <h2>Where the money went</h2>
-          <span className="small muted">Spending only — credits are excluded</span>
+          <span className="small muted">After refunds — card payments and rewards are not spending</span>
         </div>
         <BarChart data={byCategory} format={(n) => formatMoney(n)} />
       </div>

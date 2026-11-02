@@ -10,7 +10,9 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { applyRules, defaultRules } from '../src/lib/categorize'
 import { parseStatement } from '../src/lib/parsers/statement'
+import { totalsOf } from '../src/lib/summary'
 
 const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures')
 const expectedFile = path.join(dir, 'expected.json')
@@ -36,6 +38,23 @@ describe.skipIf(!names.length)('real statements', () => {
 
       it('reads exactly the rows on the statement', () => {
         expect(result.transactions).toHaveLength(want.rows)
+      })
+
+      it('puts the purchase date in date and the posting date in postedDate', () => {
+        if (!want.sample) return
+        const t = result.transactions.find((x) => x.description.includes(want.sample.find))
+        expect(t.date).toBe(want.sample.date)
+        expect(t.postedDate).toBe(want.sample.postedDate)
+      })
+
+      it('tells card payments, refunds and rewards apart, and never files a credit as Income', () => {
+        if (!want.kinds) return
+        const filed = applyRules(result.transactions, defaultRules())
+        const t = totalsOf(filed)
+        expect(Math.round(t.payments * 100) / 100).toBe(want.kinds.payment)
+        expect(Math.round(t.refunded * 100) / 100).toBe(want.kinds.refund)
+        expect(Math.round(t.rewards * 100) / 100).toBe(want.kinds.cashback)
+        expect(filed.filter((x) => x.amount < 0 && x.category === 'Income')).toHaveLength(0)
       })
 
       it('gets spending and credits to the satang', () => {

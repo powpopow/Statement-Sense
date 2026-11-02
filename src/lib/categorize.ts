@@ -130,6 +130,7 @@ const CATEGORY_BASE: Record<Category, number> = {
   Transport: 200,
   Shopping: 180,
   'Fees & Interest': 120,
+  'Rewards & Cashback': 150,
   'Cash & Transfers': 100,
   Uncategorized: 0,
 }
@@ -179,11 +180,49 @@ function matches(rule: Rule, description: string): boolean {
   return description.toUpperCase().includes(pattern.toUpperCase())
 }
 
+/**
+ * What a row is, for a credit card.
+ *
+ * A debit is spending. A credit is one of three different things, and none of
+ * them is income: a payment of the card's own bill (money moving between your
+ * accounts), a refund or points offset that reverses an earlier charge, or a
+ * reward such as cashback. Counting them all as "money in" made a card payment
+ * of tens of thousands look like earnings.
+ */
+export type TransactionKind = 'spend' | 'refund' | 'cashback' | 'payment'
+
+const PAYMENT_RE = /^\s*PAYMENT\b|THANK YOU|AUTO\s*PAYMENT|รับชำระ|ชำระเงินเข้าบัตร|ชำระค่าบัตร/i
+const CASHBACK_RE = /CASH\s*BACK|REWARD|REBATE|BONUS|เงินคืน|\bCB-\d+/i
+
+export function kindOf(t: { description: string; amount: number }): TransactionKind {
+  if (t.amount > 0) return 'spend'
+  if (PAYMENT_RE.test(t.description)) return 'payment'
+  if (CASHBACK_RE.test(t.description)) return 'cashback'
+  return 'refund'
+}
+
+/** Cards only: file a credit by what it is, not as income. `hits` is already in priority order. */
+function categorizeCardCredit(description: string, hits: Rule[]): Category {
+  const kind = kindOf({ description, amount: -1 })
+  if (kind === 'payment') return 'Cash & Transfers'
+  if (kind === 'cashback') return 'Rewards & Cashback'
+  // A refund reverses a charge at the same merchant, so it belongs to that
+  // merchant's category and nets against it.
+  return hits.find((r) => r.category !== 'Income' && r.category !== 'Cash & Transfers')?.category ?? 'Uncategorized'
+}
+
 /** Pick the highest-priority matching rule; ties go to the longer pattern. */
-export function categorizeOne(description: string, amount: number, rules: Rule[]): Category {
+export function categorizeOne(
+  description: string,
+  amount: number,
+  rules: Rule[],
+  options: { card?: boolean } = {},
+): Category {
   const hits = rules
     .filter((r) => matches(r, description))
     .sort((a, b) => b.priority - a.priority || b.pattern.length - a.pattern.length)
+
+  if (options.card && amount < 0) return categorizeCardCredit(description, hits)
 
   if (hits.length) {
     const category = hits[0].category
@@ -197,9 +236,14 @@ export function categorizeOne(description: string, amount: number, rules: Rule[]
   return amount < 0 ? 'Income' : 'Uncategorized'
 }
 
+/** The statement parser labels a row's source with the bank and the kind, e.g. "UOB Thailand — credit card". */
+const isCardRow = (t: Transaction) => /credit card/i.test(t.source)
+
 /** Apply rules across a set, leaving hand-picked categories untouched. */
 export function applyRules(transactions: Transaction[], rules: Rule[]): Transaction[] {
   return transactions.map((t) =>
-    t.categoryLocked ? t : { ...t, category: categorizeOne(t.description, t.amount, rules) },
+    t.categoryLocked
+      ? t
+      : { ...t, category: categorizeOne(t.description, t.amount, rules, { card: isCardRow(t) }) },
   )
 }

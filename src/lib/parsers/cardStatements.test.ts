@@ -129,3 +129,32 @@ describe('rows come only from the transactions table', () => {
     expect(result.transactions).toHaveLength(2)
   })
 })
+
+describe('which date is the purchase', () => {
+  const row = (header: string) =>
+    parseStatement([[header, '22/09/26 23/09/26 EXAMPLE SHOP BANGKOK 60.00']], 'x.pdf', 'x').transactions[0]
+
+  it('is the first date when the header says TRANS DATE first (KBank, ttb, KTC)', () => {
+    const t = row('TRANS DATE POSTING DATE DESCRIPTION AMOUNT (BAHT)')
+    expect(t.date).toBe('2026-09-22')
+    expect(t.postedDate).toBe('2026-09-23')
+  })
+
+  it('is the second date when the header says POST DATE first (UOB)', () => {
+    const t = row('POST DATE TRANS DATE DESCRIPTION AMOUNT (THB)')
+    expect(t.date).toBe('2026-09-23')
+    expect(t.postedDate).toBe('2026-09-22')
+  })
+
+  it('assumes the first date is the purchase when no header says otherwise', () => {
+    const t = row('DATE DESCRIPTION AMOUNT')
+    expect(t.date).toBe('2026-09-22')
+    expect(t.postedDate).toBe('2026-09-23')
+  })
+
+  it('uses a lone date as both', () => {
+    const [t] = parseStatement([['DATE DESCRIPTION AMOUNT', '22/09/26 EXAMPLE SHOP BANGKOK 60.00']], 'x.pdf', 'x').transactions
+    expect(t.date).toBe('2026-09-22')
+    expect(t.postedDate).toBeUndefined()
+  })
+})

@@ -111,9 +111,42 @@ const BROUGHT_FORWARD_RE = /BALANCE BROUGHT FORWARD|OPENING BALANCE|ยอดย
 
 interface CandidateRow {
   line: string
+  /** The purchase date. */
   date: string
+  /** The posting date, when the row carries two dates. */
+  postedDate?: string
   description: string
   amounts: ParsedAmount[]
+}
+
+/**
+ * Which date comes first on a row.
+ *
+ * Card statements print two dates, and banks disagree on the order: UOB prints
+ * "POST DATE  TRANS DATE", KBank, ttb and KTC print the transaction date first.
+ * The column header says which; without one, the transaction date is assumed first.
+ */
+type DateOrder = 'post-first' | 'trans-first'
+const POST_FIRST_HEADER_RE = /POST(?:ING|ED)?\s*DATE.*TRANS(?:\.|ACTION)?\s*DATE/i
+
+function detectDateOrder(lines: string[]): DateOrder {
+  return lines.some((line) => POST_FIRST_HEADER_RE.test(line)) ? 'post-first' : 'trans-first'
+}
+
+/** Up to two dates at the start of a line, as ISO dates, in the order printed. */
+function leadingDates(line: string, fallbackYear?: number): string[] {
+  const dates: string[] = []
+  let rest = normalizeThaiDigits(line)
+  for (let i = 0; i < 2; i++) {
+    const match = rest.match(LEADING_DATE_RE)
+    if (!match) break
+    // The shape alone is not enough: a merchant can open with digits ("90GRAMS").
+    const iso = parseThaiDate(match[1], fallbackYear)
+    if (!iso) break
+    dates.push(iso)
+    rest = rest.slice(match[0].length).replace(/^[\s|:,]+/, '')
+  }
+  return dates
 }
 
 /**
@@ -228,17 +261,19 @@ function transactionLines(lines: string[]): string[] | null {
   return opened ? kept : null
 }
 
-function collectRows(lines: string[], fallbackYear?: number): CandidateRow[] {
+function collectRows(lines: string[], fallbackYear?: number, order: DateOrder = 'trans-first'): CandidateRow[] {
   const rows: CandidateRow[] = []
   for (const line of lines) {
     if (!line.trim() || SKIP_RE.test(line) || MALFORMED_DATE_RE.test(line)) continue
-    const dateMatch = normalizeThaiDigits(line).match(LEADING_DATE_RE)
-    if (!dateMatch) continue
-    const date = parseThaiDate(dateMatch[1], fallbackYear)
-    if (!date) continue
+    const dates = leadingDates(line, fallbackYear)
+    if (!dates.length) continue
     const amounts = findAmounts(line)
     if (!amounts.length) continue
-    rows.push({ line, date, description: buildDescription(line, amounts), amounts })
+    // One date is both; two are purchase and posting, in the header's order.
+    const [first, second] = dates
+    const date = second && order === 'post-first' ? second : first
+    const postedDate = second ? (order === 'post-first' ? first : second) : undefined
+    rows.push({ line, date, postedDate, description: buildDescription(line, amounts), amounts })
   }
   return rows
 }
@@ -312,7 +347,7 @@ export function parseStatement(
     )
   }
 
-  const rows = collectRows(transactionLines(lines) ?? lines, year)
+  const rows = collectRows(transactionLines(lines) ?? lines, year, detectDateOrder(lines))
   if (!rows.length) {
     return {
       transactions: [],
@@ -372,6 +407,7 @@ export function parseStatement(
     transactions.push({
       id: `${idPrefix}-t${i}`,
       date: row.date,
+      ...(row.postedDate && row.postedDate !== row.date ? { postedDate: row.postedDate } : {}),
       description,
       amount: Math.round(amount * 100) / 100,
       currency: 'THB',

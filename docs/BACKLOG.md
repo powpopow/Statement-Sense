@@ -43,7 +43,7 @@ Status: ☐ open · ◐ in progress · ☑ done · ✋ waiting on a decision · 
 | SS-106 | P1 | L | **IndexedDB local store** + outbox (replaces `localStorage`); migration from the old cache | ☐ |
 | SS-107 | P2 | M | Per-bank adapters (first the user's banks), each with real fixtures | ✋ |
 | SS-108 | P2 | M | CSV / bank-app screenshot import for statements (not only orders) | ⏸ |
-| SS-109 | P1 | S | **Card payments are transfers**: `PAYMENT - THANK YOU`, `Payment via ttb touch`, `Payment-SCB…Internet` are not spending *or* income | ☐ |
+| SS-109 | P1 | S | **Card payments are transfers**: `PAYMENT - THANK YOU`, `Payment via ttb touch`, `Payment-SCB…Internet` are not spending *or* income | ☑ 2026-11-03 |
 | SS-110 | P3 | S | Statement coverage: months with no statement per account | ☐ |
 
 ### Found from the real samples (2026-11-03) — Phase 1 additions
@@ -53,9 +53,9 @@ Status: ☐ open · ◐ in progress · ☑ done · ✋ waiting on a decision · 
 | SS-111 | P0 | M | **Bank detection from the issuer**: header/legal-entity lines, ignore pay-in-slip and footer text; add KTC (Krungthai Card) and other issuers; fixture test on the KTC file | ☑ 2026-11-03 |
 | SS-112 | P0 | S | Sign handling: a lone `-` before an amount (`Payment … - 500.00`) is a credit | ☑ 2026-11-03 |
 | SS-113 | P0 | M | **Rows only from the transactions table** (between the column header and SUB TOTAL / TOTAL); stop importing credit-bureau, points and interest tables | ☑ 2026-11-03 |
-| SS-114 | P1 | M | Read **both dates** using the table header's column order (UOB post→trans, others trans→post); `date` = purchase date, posting date kept | ☐ |
+| SS-114 | P1 | M | Read **both dates** using the table header's column order (UOB post→trans, others trans→post); `date` = purchase date, posting date kept | ☑ 2026-11-03 |
 | SS-115 | P1 | M | **Card sections** in one PDF (product name + masked number) → one Account each, reconciled separately (UOB: 3 cards) | ☐ |
-| SS-116 | P1 | M | **Credit kinds**: card payment (transfer), refund / points offset (nets against the merchant's category), cashback, fee refund — not all "Income" | ☐ |
+| SS-116 | P1 | M | **Credit kinds**: card payment (transfer), refund / points offset (nets against the merchant's category), cashback, fee refund — not all "Income" | ☑ 2026-11-03 |
 | SS-117 | P2 | S | Strip trailing `THB` / country code from descriptions; use them for foreign-spend detection | ☐ |
 | SS-118 | P2 | S | Statement year from 2-digit-year dates (`14 Oct 26`); Dec→Jan year roll-over | ☐ |
 | SS-119 | P2 | M | Instalment rows (`03/10`): record plan n of m; do not double the amount | ☐ |
@@ -73,8 +73,9 @@ Status: ☐ open · ◐ in progress · ☑ done · ✋ waiting on a decision · 
 | SS-131 | P1 | M | **Money received is not income**: from a known person it is a settlement / reimbursement; otherwise a "transfer in". Salary and interest stay income | ⏸ |
 | SS-132 | P2 | L | **Group events / shared costs** (e.g. a weekly sport): cost fronted vs shares received, net cost per event, link incoming transfers by pattern | ⏸ |
 | SS-133 | P1 | S | **Cash allowance**: the user states a monthly amount moved to cash (a round monthly figure); it counts as personal spending in a "Cash" category for that month; editable per month | ☐ |
-| SS-134 | P1 | S | **Spend-only summary**: drop "Money in / Net" (meaningless for cards); show spend, refunds & credits, card payments separately; total = card spend (mine) + stated cash | ☐ |
+| SS-134 | P1 | S | **Spend-only summary**: drop "Money in / Net" (meaningless for cards); show spend, refunds & credits, card payments separately; total = card spend (mine) + stated cash | ☑ 2026-11-03 (Money in / Net replaced by Spend, Rewards, Paid to your cards; refunds net against their category and merchant) |
 | SS-135 | P0 | S | Rows whose description contains "TOTAL" were dropped as summary lines (a merchant such as *Total Access* vanished); skip only genuine total lines | ☑ 2026-11-03 |
+| SS-136 | P1 | L | **Categorisation coverage**: on real statements ~43% of spend is "Uncategorized" (e.g. fuel stations, payment gateways, app stores, games, hospitals). Extend the merchant rules, group by merchant not description, and offer "always categorise this merchant as…" when the user fixes one (see SS-402) | ☐ |
 
 ## Phase 2 — Backend and sync (requirements 5, 7, 8)
 
@@ -133,6 +134,8 @@ Status: ☐ open · ◐ in progress · ☑ done · ✋ waiting on a decision · 
 - Duplicate flags with a real overlapping screenshot pair (shipped 2026-11-03, not yet tried).
 
 ## Lessons learned
+- *2026-11-03:* "Money in" on a card is not income. Payments to the card are transfers, refunds reverse a charge (and net against it), cashback is a reward. Three different things; the old code called them all Income and the totals were nonsense.
+- *2026-11-03:* a refund only nets against its merchant if both sides get the *same* merchant label (`PWP: WWW.GRAB.COM` vs `WWW.GRAB.COM BANGKOK`). Group by a normalised merchant, never by the raw description.
 - *2026-11-03:* never identify the issuer by "a bank's name appears anywhere in the text": pay-in slips list every bank and merchant rows name banks (`Payment-SCB…`). Score the letterhead only, weight identifiers the issuer alone prints, and skip rows and everything after the payment slip.
 - *2026-11-03:* rows belong to the **transactions table**, not to any line that starts with a date — credit-bureau and points tables look just like transactions.
 - *2026-11-03:* writing the regression test for one bug exposed another (`TOTAL` in a merchant name). Test the neighbours.

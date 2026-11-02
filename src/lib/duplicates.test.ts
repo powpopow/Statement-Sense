@@ -57,6 +57,19 @@ describe('dedupeTransactions', () => {
     expect(dedupeTransactions(stored, [tx({ description: '7-ELEVEN SUKHUMVIT 21' })])).toHaveLength(0)
   })
 
+  it('still recognises a row saved before purchase and posting dates were told apart', () => {
+    // Old rows hold whichever date came first; the re-import now has both.
+    const stored = [tx({ date: '2026-09-15' })]
+    const reimport = [tx({ date: '2026-09-14', postedDate: '2026-09-15' })]
+    expect(dedupeTransactions(stored, reimport)).toHaveLength(0)
+  })
+
+  it('does not let one stored row absorb two incoming rows through its two dates', () => {
+    const stored = [tx({ date: '2026-09-14', postedDate: '2026-09-15' })]
+    const incoming = [tx({ date: '2026-09-14', postedDate: '2026-09-15' }), tx({ date: '2026-09-15' })]
+    expect(dedupeTransactions(stored, incoming)).toHaveLength(1)
+  })
+
   it('keeps rows that differ in date or amount', () => {
     expect(dedupeTransactions([tx()], [tx({ date: '2026-10-06' }), tx({ amount: 46 })])).toHaveLength(2)
   })

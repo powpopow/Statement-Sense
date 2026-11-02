@@ -280,7 +280,20 @@ describe('UOB credit card statement', () => {
   it('takes the year from the header when rows carry none', () => {
     // "15 SEP 14 SEP" previously read the next date's day as the year → 2014.
     expect(result.transactions.every((t) => t.date.startsWith('2026-'))).toBe(true)
-    expect(find('LINEPAY').date).toBe('2026-09-15')
+  })
+
+  it('reads UOB\'s POST DATE then TRANS DATE: date is the purchase, postedDate the posting', () => {
+    expect(find('LINEPAY').date).toBe('2026-09-14')
+    expect(find('LINEPAY').postedDate).toBe('2026-09-15')
+  })
+
+  it('keeps a purchase made on 30 Sep, posted 1 Oct, in September', () => {
+    expect(find('Netflix').date).toBe('2026-09-30')
+    expect(find('Netflix').postedDate).toBe('2026-10-01')
+  })
+
+  it('leaves postedDate off when both dates are the same day', () => {
+    expect(find('PAYMENT').postedDate).toBeUndefined()
   })
 
   it('keeps a merchant name that opens with digits', () => {

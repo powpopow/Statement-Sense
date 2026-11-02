@@ -14,7 +14,7 @@ const SPREADSHEET_KEY = 'statement-sense.spreadsheetId'
 export const SPREADSHEET_NAME = 'Statement Sense Data'
 
 const TX_HEADERS = [
-  'id', 'date', 'transactionDate', 'description', 'amount', 'currency',
+  'id', 'date', 'postedDate', 'description', 'amount', 'currency',
   'foreignAmount', 'foreignCurrency', 'category', 'categoryLocked',
   'source', 'sourceFile', 'confidence', 'notes', 'matchedOrderId', 'owner',
 ] as const
@@ -199,7 +199,7 @@ export async function readTransactions(spreadsheetId: string): Promise<Transacti
     return {
       id,
       date,
-      transactionDate: get('transactionDate') || undefined,
+      postedDate: get('postedDate') || undefined,
       description: get('description'),
       amount: num(get('amount')),
       currency: get('currency') || 'THB',

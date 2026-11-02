@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { kindOf, type TransactionKind } from '../lib/categorize'
 import { lookAlikeTransactions } from '../lib/duplicates'
 import { formatMoney } from '../lib/money'
 import { formatDate } from '../lib/thaiDate'
@@ -160,6 +161,13 @@ export function Transactions({ store }: { store: AppStore }) {
   )
 }
 
+const KIND_LABEL: Record<TransactionKind, string | null> = {
+  spend: null,
+  payment: 'card payment',
+  refund: 'refund',
+  cashback: 'reward',
+}
+
 function Row({
   transaction,
   lookAlike,
@@ -187,6 +195,12 @@ function Row({
       <td>
         {transaction.confidence < 0.7 && <span className="flag" title="Low confidence — please check" />}
         {transaction.description}
+        {KIND_LABEL[kindOf(transaction)] && (
+          <>
+            {' '}
+            <span className="pill">{KIND_LABEL[kindOf(transaction)]}</span>
+          </>
+        )}
         {lookAlike && (
           <>
             {' '}

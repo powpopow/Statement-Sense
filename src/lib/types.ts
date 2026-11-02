@@ -9,6 +9,7 @@ export type Category =
   | 'Travel'
   | 'Cash & Transfers'
   | 'Fees & Interest'
+  | 'Rewards & Cashback'
   | 'Income'
   | 'Uncategorized'
 
@@ -23,6 +24,7 @@ export const CATEGORIES: Category[] = [
   'Travel',
   'Cash & Transfers',
   'Fees & Interest',
+  'Rewards & Cashback',
   'Income',
   'Uncategorized',
 ]
@@ -30,10 +32,14 @@ export const CATEGORIES: Category[] = [
 /** A single line item from a bank or credit card statement. */
 export interface Transaction {
   id: string
-  /** ISO date (YYYY-MM-DD) the transaction was posted. */
+  /**
+   * ISO date (YYYY-MM-DD) the purchase was made — the one that answers "when
+   * did I spend this", and the one an order's date lines up with. When a
+   * statement prints only one date, that is it.
+   */
   date: string
-  /** ISO date the purchase was made, when the statement distinguishes it. */
-  transactionDate?: string
+  /** ISO date the bank posted it, when the statement prints both dates. */
+  postedDate?: string
   description: string
   /** Positive for money leaving the account, negative for money coming in. */
   amount: number

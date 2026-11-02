@@ -47,25 +47,35 @@ export const LOOK_ALIKE_THRESHOLD = 0.8
 
 // ── at import ────────────────────────────────────────────────────────────────
 
-const transactionKey = (t: Transaction) =>
-  `${t.date}|${t.amount.toFixed(2)}|${t.description.slice(0, 40).toUpperCase()}`
+/**
+ * A row is known by its description and amount on either of its dates. Rows
+ * saved before purchase and posting dates were told apart hold whichever date
+ * came first, so matching on both keeps them recognisable after a re-import.
+ */
+function transactionKeys(t: Transaction): string[] {
+  const rest = `${t.amount.toFixed(2)}|${t.description.slice(0, 40).toUpperCase()}`
+  return [...new Set([t.date, t.postedDate].filter((d): d is string => Boolean(d)))].map((d) => `${d}|${rest}`)
+}
 
 /**
  * Drop incoming rows that are already stored, one-for-one. If a purchase
  * appears twice in a file and once in your data, one of them is new.
  */
 export function dedupeTransactions(existing: Transaction[], incoming: Transaction[]): Transaction[] {
-  const stock = new Map<string, number>()
-  for (const t of existing) {
-    const key = transactionKey(t)
-    stock.set(key, (stock.get(key) ?? 0) + 1)
-  }
+  // Each stored row can be matched by one incoming row, once.
+  const pool = new Map<string, number[]>()
+  existing.forEach((t, index) => {
+    for (const key of transactionKeys(t)) pool.set(key, [...(pool.get(key) ?? []), index])
+  })
+  const used = new Set<number>()
+
   return incoming.filter((t) => {
-    const key = transactionKey(t)
-    const left = stock.get(key) ?? 0
-    if (left > 0) {
-      stock.set(key, left - 1)
-      return false
+    for (const key of transactionKeys(t)) {
+      const index = pool.get(key)?.find((i) => !used.has(i))
+      if (index !== undefined) {
+        used.add(index)
+        return false
+      }
     }
     return true
   })

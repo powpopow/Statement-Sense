@@ -1,4 +1,6 @@
 import { useMemo } from 'react'
+import { applyOwner, ownerOf, sharedOwner, usePeople } from '../lib/people'
+import { OwnerSelect } from './OwnerSelect'
 import { AUTO_MATCH_THRESHOLD, findMatches } from '../lib/matching'
 import { formatMoney } from '../lib/money'
 import { formatDate } from '../lib/thaiDate'
@@ -7,6 +9,7 @@ import type { MatchCandidate } from '../lib/types'
 
 export function Matches({ store }: { store: AppStore }) {
   const { transactions, orders } = store
+  const { people, addPerson } = usePeople(transactions, orders)
 
   const unmatchedOrders = useMemo(() => orders.filter((o) => !o.matchedTransactionId), [orders])
   const unmatchedTransactions = useMemo(
@@ -32,6 +35,9 @@ export function Matches({ store }: { store: AppStore }) {
     if (!pairs.length) return
     const orderByTransaction = new Map(pairs.map((p) => [p.transaction.id, p.order.id]))
     const transactionByOrder = new Map(pairs.map((p) => [p.order.id, p.transaction.id]))
+    // A matched order and charge are one purchase, so they share an owner.
+    const pairByTransaction = new Map(pairs.map((p) => [p.transaction.id, p]))
+    const pairByOrder = new Map(pairs.map((p) => [p.order.id, p]))
 
     store.commit({
       transactions: transactions.map((t) =>
@@ -39,6 +45,7 @@ export function Matches({ store }: { store: AppStore }) {
           ? {
               ...t,
               matchedOrderId: orderByTransaction.get(t.id),
+              owner: sharedOwner(pairByTransaction.get(t.id)!.order, t),
               // The order knows what was actually bought; the statement only
               // knows the payment processor, so the order wins on description.
               description: enrich(t.description, pairs.find((p) => p.transaction.id === t.id)!),
@@ -46,7 +53,13 @@ export function Matches({ store }: { store: AppStore }) {
           : t,
       ),
       orders: orders.map((o) =>
-        transactionByOrder.has(o.id) ? { ...o, matchedTransactionId: transactionByOrder.get(o.id) } : o,
+        transactionByOrder.has(o.id)
+          ? {
+              ...o,
+              matchedTransactionId: transactionByOrder.get(o.id),
+              owner: sharedOwner(o, pairByOrder.get(o.id)!.transaction),
+            }
+          : o,
       ),
     })
   }
@@ -159,6 +172,7 @@ export function Matches({ store }: { store: AppStore }) {
             <p className="small muted" style={{ margin: '4px 0 0' }}>
               {formatMoney(orders.reduce((s, o) => s + o.amount, 0))} across every order read from your screenshots.
               Worth a glance after an import — OCR can misread an amount, and a wrong one here will never match.
+              Pick who each order is for; it follows the card charge once they are matched.
             </p>
           </div>
         </div>
@@ -169,7 +183,7 @@ export function Matches({ store }: { store: AppStore }) {
               <tr>
                 <th>Date</th>
                 <th>Order</th>
-                <th>Platform</th>
+                <th>Platform · for</th>
                 <th className="num">Amount</th>
                 <th />
               </tr>
@@ -195,7 +209,18 @@ export function Matches({ store }: { store: AppStore }) {
                       </div>
                     </td>
                     <td>
-                      <span className="pill">{order.platform}</span>
+                      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                        <span className="pill">{order.platform}</span>
+                        <OwnerSelect
+                          label={`Who is ${order.description.slice(0, 30)} for?`}
+                          value={ownerOf(order)}
+                          people={people}
+                          onAddPerson={addPerson}
+                          onChange={(name) =>
+                            store.commit(applyOwner(transactions, orders, { kind: 'order', id: order.id }, name))
+                          }
+                        />
+                      </div>
                     </td>
                     <td className="num" style={{ fontWeight: 500 }}>
                       {formatMoney(order.amount)}

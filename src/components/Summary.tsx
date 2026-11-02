@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { formatMoney } from '../lib/money'
+import { ME, ownerOf, peopleFrom } from '../lib/people'
 import type { Transaction } from '../lib/types'
 import { BarChart, ColumnChart, type Datum } from './charts'
 
@@ -18,7 +19,18 @@ function monthLabel(month: string): string {
   return `${name} ’${String(y).slice(2)}`
 }
 
-export function Summary({ transactions }: { transactions: Transaction[] }) {
+const EVERYONE = '__everyone__'
+
+export function Summary({ transactions: all }: { transactions: Transaction[] }) {
+  // Whose spending to show. Yours by default, so a charge you paid for your
+  // mum doesn't inflate your own totals. Everything below works on this list.
+  const [whose, setWhose] = useState<string>(ME)
+  const people = useMemo(() => peopleFrom(all, []), [all])
+  const transactions = useMemo(
+    () => (whose === EVERYONE ? all : all.filter((t) => ownerOf(t) === whose)),
+    [all, whose],
+  )
+
   const months = useMemo(
     () => [...new Set(transactions.map((t) => t.date.slice(0, 7)))].sort().reverse(),
     [transactions],
@@ -100,7 +112,19 @@ export function Summary({ transactions }: { transactions: Transaction[] }) {
     return [...totals.entries()].sort((a, b) => b[1].value - a[1].value).slice(0, 8)
   }, [spend])
 
-  if (!transactions.length) {
+  // What you paid for other people, in the chosen period: the amount to ask for.
+  const forOthers = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const t of all) {
+      const owner = ownerOf(t)
+      if (t.amount <= 0 || owner === ME) continue
+      if (month !== 'all' && !t.date.startsWith(month)) continue
+      totals.set(owner, (totals.get(owner) ?? 0) + t.amount)
+    }
+    return [...totals.entries()].sort((a, b) => b[1] - a[1])
+  }, [all, month])
+
+  if (!all.length) {
     return (
       <div className="card">
         <div className="empty">
@@ -118,6 +142,17 @@ export function Summary({ transactions }: { transactions: Transaction[] }) {
   return (
     <>
       <div className="row" style={{ marginBottom: 16 }}>
+        <label className="small secondary" htmlFor="whose">
+          Whose
+        </label>
+        <select id="whose" value={whose} onChange={(e) => setWhose(e.target.value)}>
+          {people.map((p) => (
+            <option key={p} value={p}>
+              {p === ME ? 'Mine' : `${p}’s`}
+            </option>
+          ))}
+          <option value={EVERYONE}>Everyone</option>
+        </select>
         <label className="small secondary" htmlFor="month">
           Period
         </label>
@@ -152,6 +187,13 @@ export function Summary({ transactions }: { transactions: Transaction[] }) {
           </div>
           <div className="sub">{month === 'all' ? 'Across everything imported' : monthLabel(month)}</div>
         </div>
+        {whose === ME && forOthers.length > 0 && (
+          <div className="tile">
+            <div className="label">Paid for others</div>
+            <div className="value">{formatMoney(forOthers.reduce((s, [, v]) => s + v, 0))}</div>
+            <div className="sub">{forOthers.map(([name, v]) => `${name} ${formatMoney(v)}`).join(' · ')}</div>
+          </div>
+        )}
         <div className="tile">
           <div className="label">Needs a look</div>
           <div className="value">{flagged + uncategorized.length}</div>

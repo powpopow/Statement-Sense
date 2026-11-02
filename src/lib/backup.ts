@@ -5,6 +5,7 @@
  * clear wipes. These give you a file you own: JSON round-trips the whole app
  * state, CSV is for reading the transactions in Excel or Sheets by hand.
  */
+import { ownerOf } from './people'
 import type { Order, Rule, Transaction } from './types'
 
 /** Bumped only if the shape changes in a way a restore has to handle. */
@@ -57,7 +58,7 @@ function toCsv(headers: string[], rows: unknown[][]): string {
 
 export function exportTransactionsCsv(transactions: Transaction[]) {
   const csv = toCsv(
-    ['Date', 'Description', 'Category', 'Amount (THB)', 'Direction', 'Confidence', 'Source file'],
+    ['Date', 'Description', 'Category', 'Amount (THB)', 'Direction', 'Confidence', 'Source file', 'For'],
     transactions.map((t) => [
       t.date,
       t.description,
@@ -66,6 +67,7 @@ export function exportTransactionsCsv(transactions: Transaction[]) {
       t.amount < 0 ? 'in' : 'out',
       t.confidence.toFixed(2),
       t.sourceFile,
+      ownerOf(t),
     ]),
   )
   download(`statement-sense-transactions-${stamp()}.csv`, csv, 'text/csv')
@@ -73,7 +75,7 @@ export function exportTransactionsCsv(transactions: Transaction[]) {
 
 export function exportOrdersCsv(orders: Order[]) {
   const csv = toCsv(
-    ['Date', 'Platform', 'Order ref', 'Description', 'Amount (THB)', 'Matched', 'Source file'],
+    ['Date', 'Platform', 'Order ref', 'Description', 'Amount (THB)', 'Matched', 'Source file', 'For'],
     orders.map((o) => [
       o.date,
       o.platform,
@@ -82,6 +84,7 @@ export function exportOrdersCsv(orders: Order[]) {
       o.amount.toFixed(2),
       o.matchedTransactionId ? 'yes' : 'no',
       o.sourceFile,
+      ownerOf(o),
     ]),
   )
   download(`statement-sense-orders-${stamp()}.csv`, csv, 'text/csv')

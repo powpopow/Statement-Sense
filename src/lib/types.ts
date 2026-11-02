@@ -52,6 +52,8 @@ export interface Transaction {
   notes?: string
   /** Id of a matched marketplace order, if any. */
   matchedOrderId?: string
+  /** Whose money this was. Absent means yours; see people.ts. */
+  owner?: string
 }
 
 /** A line item from a Shopee / Grab / Lazada order export or screenshot. */
@@ -68,6 +70,8 @@ export interface Order {
   sourceFile: string
   confidence: number
   matchedTransactionId?: string
+  /** Who the order was for. Absent means you; see people.ts. */
+  owner?: string
 }
 
 /** A user-editable rule mapping a description pattern to a category. */

@@ -23,6 +23,12 @@ Everything is parsed **in your browser**. The PDF never leaves your machine.
    (`…COMPLEXBANGKOK`) removed — so one shop is one row rather than five.
    "Copy list" exports it as Markdown for working through later.
 
+6. **Say whose money it was.** Every charge and order has a *For* menu — *Me*,
+   *Mom*, or anyone you add. Tag an order and its matched card charge follows
+   (and the other way round). Summary shows *Mine* by default, so what you paid
+   for someone else stays out of your totals, and a *Paid for others* tile adds
+   up what each person owes you. The owner is saved in the sheet and in backups.
+
 ## Quick start
 
 ```bash

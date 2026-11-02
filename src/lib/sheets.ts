@@ -16,12 +16,12 @@ export const SPREADSHEET_NAME = 'Statement Sense Data'
 const TX_HEADERS = [
   'id', 'date', 'transactionDate', 'description', 'amount', 'currency',
   'foreignAmount', 'foreignCurrency', 'category', 'categoryLocked',
-  'source', 'sourceFile', 'confidence', 'notes', 'matchedOrderId',
+  'source', 'sourceFile', 'confidence', 'notes', 'matchedOrderId', 'owner',
 ] as const
 
 const ORDER_HEADERS = [
   'id', 'platform', 'date', 'orderRef', 'description', 'amount', 'currency',
-  'items', 'sourceFile', 'confidence', 'matchedTransactionId',
+  'items', 'sourceFile', 'confidence', 'matchedTransactionId', 'owner',
 ] as const
 
 const RULE_HEADERS = ['id', 'pattern', 'matchType', 'category', 'priority', 'enabled'] as const
@@ -80,6 +80,18 @@ async function appendRows(spreadsheetId: string, tab: string, rows: unknown[][])
   await googleFetch(
     `${SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(tab)}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     { method: 'POST', body: JSON.stringify({ values: rows }) },
+  )
+}
+
+/**
+ * Keep a tab's header row current. Sheets made before a column existed have an
+ * older header, and a value in a column with no header is lost on the next
+ * read, so every write refreshes it. Cheap, and it migrates old sheets in place.
+ */
+async function writeHeaders(spreadsheetId: string, tab: string, headers: readonly string[]) {
+  await googleFetch(
+    `${SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(tab)}!A1?valueInputOption=RAW`,
+    { method: 'PUT', body: JSON.stringify({ values: [headers] }) },
   )
 }
 
@@ -162,11 +174,13 @@ const num = (s: string, fallback = 0) => {
 const bool = (s: string) => /^(true|yes|1)$/i.test(s.trim())
 
 export async function writeTransactions(spreadsheetId: string, transactions: Transaction[]) {
+  await writeHeaders(spreadsheetId, TABS.transactions, TX_HEADERS)
   await clearTab(spreadsheetId, TABS.transactions)
   await appendRows(spreadsheetId, TABS.transactions, transactions.map((t) => toRow(t, TX_HEADERS)))
 }
 
 export async function writeOrders(spreadsheetId: string, orders: Order[]) {
+  await writeHeaders(spreadsheetId, TABS.orders, ORDER_HEADERS)
   await clearTab(spreadsheetId, TABS.orders)
   await appendRows(spreadsheetId, TABS.orders, orders.map((o) => toRow(o, ORDER_HEADERS)))
 }
@@ -198,6 +212,7 @@ export async function readTransactions(spreadsheetId: string): Promise<Transacti
       confidence: num(get('confidence'), 0.5),
       notes: get('notes') || undefined,
       matchedOrderId: get('matchedOrderId') || undefined,
+      owner: get('owner') || undefined,
     }
   })
 }
@@ -219,6 +234,7 @@ export async function readOrders(spreadsheetId: string): Promise<Order[]> {
       sourceFile: get('sourceFile'),
       confidence: num(get('confidence'), 0.5),
       matchedTransactionId: get('matchedTransactionId') || undefined,
+      owner: get('owner') || undefined,
     }
   })
 }

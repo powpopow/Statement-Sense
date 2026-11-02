@@ -2,13 +2,17 @@ import { useMemo, useState } from 'react'
 import { formatMoney } from '../lib/money'
 import { formatDate } from '../lib/thaiDate'
 import { CATEGORIES, type Category, type Transaction } from '../lib/types'
+import { applyOwner, ME, ownerOf, usePeople } from '../lib/people'
 import type { AppStore } from '../lib/store'
+import { OwnerSelect } from './OwnerSelect'
 
 type SortKey = 'date' | 'amount' | 'description' | 'category'
 
 export function Transactions({ store }: { store: AppStore }) {
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<Category | 'all' | 'flagged'>('all')
+  const [whose, setWhose] = useState<string>('all')
+  const { people, addPerson } = usePeople(store.transactions, store.orders)
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [ascending, setAscending] = useState(false)
 
@@ -16,6 +20,7 @@ export function Transactions({ store }: { store: AppStore }) {
     const q = query.trim().toUpperCase()
     const filtered = store.transactions.filter((t) => {
       if (q && !t.description.toUpperCase().includes(q) && !t.sourceFile.toUpperCase().includes(q)) return false
+      if (whose !== 'all' && ownerOf(t) !== whose) return false
       if (category === 'flagged') return t.confidence < 0.7 || t.category === 'Uncategorized'
       if (category !== 'all' && t.category !== category) return false
       return true
@@ -25,7 +30,7 @@ export function Transactions({ store }: { store: AppStore }) {
       if (sortKey === 'amount') return (a.amount - b.amount) * direction
       return String(a[sortKey]).localeCompare(String(b[sortKey])) * direction
     })
-  }, [store.transactions, query, category, sortKey, ascending])
+  }, [store.transactions, query, category, whose, sortKey, ascending])
 
   const total = rows.reduce((s, t) => s + Math.max(0, t.amount), 0)
 
@@ -36,6 +41,10 @@ export function Transactions({ store }: { store: AppStore }) {
         t.id === id ? { ...t, category: next, categoryLocked: true } : t,
       ),
     })
+  }
+
+  function setOwnerFor(id: string, name: string) {
+    store.commit(applyOwner(store.transactions, store.orders, { kind: 'transaction', id }, name))
   }
 
   function remove(id: string) {
@@ -89,6 +98,14 @@ export function Transactions({ store }: { store: AppStore }) {
               </option>
             ))}
           </select>
+          <select value={whose} onChange={(e) => setWhose(e.target.value)} aria-label="Whose spending">
+            <option value="all">Everyone</option>
+            {people.map((p) => (
+              <option key={p} value={p}>
+                {p === ME ? 'Mine' : `${p}’s`}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -108,7 +125,15 @@ export function Transactions({ store }: { store: AppStore }) {
             </thead>
             <tbody>
               {rows.map((t) => (
-                <Row key={t.id} transaction={t} onCategory={setCategoryFor} onRemove={remove} />
+                <Row
+                  key={t.id}
+                  transaction={t}
+                  people={people}
+                  onCategory={setCategoryFor}
+                  onOwner={setOwnerFor}
+                  onAddPerson={addPerson}
+                  onRemove={remove}
+                />
               ))}
             </tbody>
           </table>
@@ -117,7 +142,8 @@ export function Transactions({ store }: { store: AppStore }) {
 
       <p className="small muted" style={{ margin: '12px 0 0' }}>
         A dot marks a row the parser was unsure about — worth checking against the statement. Changing a category here
-        keeps it fixed, even if you re-run the rules later.
+        keeps it fixed, even if you re-run the rules later. “For” says whose money a charge was, so what you paid for
+        someone else stays out of your own totals.
       </p>
     </div>
   )
@@ -125,11 +151,17 @@ export function Transactions({ store }: { store: AppStore }) {
 
 function Row({
   transaction,
+  people,
   onCategory,
+  onOwner,
+  onAddPerson,
   onRemove,
 }: {
   transaction: Transaction
+  people: string[]
   onCategory: (id: string, c: Category) => void
+  onOwner: (id: string, name: string) => void
+  onAddPerson: (name: string) => string | null
   onRemove: (id: string) => void
 }) {
   const isCredit = transaction.amount < 0
@@ -148,17 +180,26 @@ function Row({
         </div>
       </td>
       <td>
-        <select
-          value={transaction.category}
-          onChange={(e) => onCategory(transaction.id, e.target.value as Category)}
-          style={{ fontSize: 13 }}
-        >
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <select
+            value={transaction.category}
+            onChange={(e) => onCategory(transaction.id, e.target.value as Category)}
+            style={{ fontSize: 13 }}
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <OwnerSelect
+            label={`Who is ${transaction.description.slice(0, 30)} for?`}
+            value={ownerOf(transaction)}
+            people={people}
+            onAddPerson={onAddPerson}
+            onChange={(name) => onOwner(transaction.id, name)}
+          />
+        </div>
       </td>
       <td className="num" style={{ color: isCredit ? 'var(--good)' : undefined, fontWeight: 500 }}>
         {isCredit ? '+' : ''}

@@ -1,0 +1,241 @@
+/**
+ * The Google Sheet is the system of record.
+ *
+ * Each data type gets its own tab with a header row, so the sheet stays
+ * readable and editable by hand — editing the Rules tab in Google Sheets is a
+ * supported way to retrain categorisation.
+ */
+import { googleFetch } from './google'
+import type { Category, Order, Rule, Transaction } from './types'
+
+const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets'
+const DRIVE_API = 'https://www.googleapis.com/drive/v3/files'
+const SPREADSHEET_KEY = 'statement-sense.spreadsheetId'
+export const SPREADSHEET_NAME = 'Statement Sense Data'
+
+const TX_HEADERS = [
+  'id', 'date', 'transactionDate', 'description', 'amount', 'currency',
+  'foreignAmount', 'foreignCurrency', 'category', 'categoryLocked',
+  'source', 'sourceFile', 'confidence', 'notes', 'matchedOrderId',
+] as const
+
+const ORDER_HEADERS = [
+  'id', 'platform', 'date', 'orderRef', 'description', 'amount', 'currency',
+  'items', 'sourceFile', 'confidence', 'matchedTransactionId',
+] as const
+
+const RULE_HEADERS = ['id', 'pattern', 'matchType', 'category', 'priority', 'enabled'] as const
+
+export const TABS = {
+  transactions: 'Transactions',
+  orders: 'Orders',
+  rules: 'Rules',
+} as const
+
+export function getSavedSpreadsheetId(): string | null {
+  try {
+    return localStorage.getItem(SPREADSHEET_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function saveSpreadsheetId(id: string | null) {
+  try {
+    if (id) localStorage.setItem(SPREADSHEET_KEY, id)
+    else localStorage.removeItem(SPREADSHEET_KEY)
+  } catch {
+    // Non-fatal: the user just has to pick the sheet again next session.
+  }
+}
+
+export function spreadsheetUrl(id: string): string {
+  return `https://docs.google.com/spreadsheets/d/${id}/edit`
+}
+
+/**
+ * Look for a sheet this app made before, so a returning user reconnects to it
+ * instead of collecting duplicates.
+ *
+ * This is the only call that needs the Drive API, and it is a convenience
+ * rather than a requirement — so a failure here (most often the Drive API not
+ * being enabled on the project) returns null and lets the caller create a
+ * fresh sheet, rather than failing the whole connection.
+ */
+export async function findExistingSpreadsheet(): Promise<string | null> {
+  const query = encodeURIComponent(
+    `name='${SPREADSHEET_NAME}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`,
+  )
+  try {
+    const response = await googleFetch(`${DRIVE_API}?q=${query}&fields=files(id,name)&pageSize=1`)
+    const data = (await response.json()) as { files?: { id: string }[] }
+    return data.files?.[0]?.id ?? null
+  } catch {
+    return null
+  }
+}
+
+async function appendRows(spreadsheetId: string, tab: string, rows: unknown[][]) {
+  if (!rows.length) return
+  await googleFetch(
+    `${SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(tab)}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    { method: 'POST', body: JSON.stringify({ values: rows }) },
+  )
+}
+
+async function clearTab(spreadsheetId: string, tab: string) {
+  await googleFetch(
+    `${SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(tab)}!A2:Z100000:clear`,
+    { method: 'POST', body: JSON.stringify({}) },
+  )
+}
+
+async function readTab(spreadsheetId: string, tab: string): Promise<string[][]> {
+  const response = await googleFetch(
+    `${SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(tab)}!A1:Z100000`,
+  )
+  const data = (await response.json()) as { values?: string[][] }
+  return data.values ?? []
+}
+
+/** Create the spreadsheet with all tabs and header rows in one call. */
+export async function createSpreadsheet(): Promise<string> {
+  const response = await googleFetch(SHEETS_API, {
+    method: 'POST',
+    body: JSON.stringify({
+      properties: { title: SPREADSHEET_NAME },
+      sheets: [
+        { properties: { title: TABS.transactions, gridProperties: { frozenRowCount: 1 } } },
+        { properties: { title: TABS.orders, gridProperties: { frozenRowCount: 1 } } },
+        { properties: { title: TABS.rules, gridProperties: { frozenRowCount: 1 } } },
+      ],
+    }),
+  })
+  const data = (await response.json()) as { spreadsheetId: string }
+  const id = data.spreadsheetId
+
+  await googleFetch(`${SHEETS_API}/${id}/values:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({
+      valueInputOption: 'RAW',
+      data: [
+        { range: `${TABS.transactions}!A1`, values: [TX_HEADERS as unknown as string[]] },
+        { range: `${TABS.orders}!A1`, values: [ORDER_HEADERS as unknown as string[]] },
+        { range: `${TABS.rules}!A1`, values: [RULE_HEADERS as unknown as string[]] },
+      ],
+    }),
+  })
+
+  return id
+}
+
+function toRow<T extends object>(item: T, headers: readonly string[]): unknown[] {
+  return headers.map((h) => {
+    const value = (item as Record<string, unknown>)[h]
+    if (value === undefined || value === null) return ''
+    if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE'
+    return value
+  })
+}
+
+/** Map a sheet row back to an object using the sheet's own header row. */
+function fromRows<T>(values: string[][], build: (get: (key: string) => string) => T | null): T[] {
+  if (values.length < 2) return []
+  const headers = values[0].map((h) => h.trim())
+  const out: T[] = []
+  for (const row of values.slice(1)) {
+    if (!row.some((cell) => cell?.trim())) continue
+    const get = (key: string) => {
+      const i = headers.indexOf(key)
+      return i === -1 ? '' : (row[i] ?? '').trim()
+    }
+    const item = build(get)
+    if (item) out.push(item)
+  }
+  return out
+}
+
+const num = (s: string, fallback = 0) => {
+  const n = Number(String(s).replace(/[^\d.-]/g, ''))
+  return Number.isFinite(n) ? n : fallback
+}
+const bool = (s: string) => /^(true|yes|1)$/i.test(s.trim())
+
+export async function writeTransactions(spreadsheetId: string, transactions: Transaction[]) {
+  await clearTab(spreadsheetId, TABS.transactions)
+  await appendRows(spreadsheetId, TABS.transactions, transactions.map((t) => toRow(t, TX_HEADERS)))
+}
+
+export async function writeOrders(spreadsheetId: string, orders: Order[]) {
+  await clearTab(spreadsheetId, TABS.orders)
+  await appendRows(spreadsheetId, TABS.orders, orders.map((o) => toRow(o, ORDER_HEADERS)))
+}
+
+export async function writeRules(spreadsheetId: string, rules: Rule[]) {
+  await clearTab(spreadsheetId, TABS.rules)
+  await appendRows(spreadsheetId, TABS.rules, rules.map((r) => toRow(r, RULE_HEADERS)))
+}
+
+export async function readTransactions(spreadsheetId: string): Promise<Transaction[]> {
+  const values = await readTab(spreadsheetId, TABS.transactions)
+  return fromRows<Transaction>(values, (get) => {
+    const id = get('id')
+    const date = get('date')
+    if (!id || !date) return null
+    return {
+      id,
+      date,
+      transactionDate: get('transactionDate') || undefined,
+      description: get('description'),
+      amount: num(get('amount')),
+      currency: get('currency') || 'THB',
+      foreignAmount: get('foreignAmount') ? num(get('foreignAmount')) : undefined,
+      foreignCurrency: get('foreignCurrency') || undefined,
+      category: (get('category') || 'Uncategorized') as Category,
+      categoryLocked: bool(get('categoryLocked')),
+      source: get('source'),
+      sourceFile: get('sourceFile'),
+      confidence: num(get('confidence'), 0.5),
+      notes: get('notes') || undefined,
+      matchedOrderId: get('matchedOrderId') || undefined,
+    }
+  })
+}
+
+export async function readOrders(spreadsheetId: string): Promise<Order[]> {
+  const values = await readTab(spreadsheetId, TABS.orders)
+  return fromRows<Order>(values, (get) => {
+    const id = get('id')
+    if (!id) return null
+    return {
+      id,
+      platform: (get('platform') || 'Other') as Order['platform'],
+      date: get('date'),
+      orderRef: get('orderRef') || undefined,
+      description: get('description'),
+      amount: num(get('amount')),
+      currency: get('currency') || 'THB',
+      items: get('items') || undefined,
+      sourceFile: get('sourceFile'),
+      confidence: num(get('confidence'), 0.5),
+      matchedTransactionId: get('matchedTransactionId') || undefined,
+    }
+  })
+}
+
+export async function readRules(spreadsheetId: string): Promise<Rule[]> {
+  const values = await readTab(spreadsheetId, TABS.rules)
+  return fromRows<Rule>(values, (get) => {
+    const pattern = get('pattern')
+    if (!pattern) return null
+    return {
+      id: get('id') || `rule-${pattern}`,
+      pattern,
+      matchType: get('matchType') === 'regex' ? 'regex' : 'contains',
+      category: (get('category') || 'Uncategorized') as Category,
+      priority: num(get('priority'), pattern.length),
+      // Blank means enabled, so a hand-added row in the sheet just works.
+      enabled: get('enabled') === '' ? true : bool(get('enabled')),
+    }
+  })
+}

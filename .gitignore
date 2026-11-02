@@ -1,0 +1,43 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Local env (your Google client ID)
+.env
+
+# Never commit financial documents or exported data.
+# Statements are personal data; keep them out of version control entirely.
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.csv
+*.tsv
+statements/
+exports/
+!public/favicon.svg
+
+# OCR runtime, copied from node_modules at build time.
+public/tesseract/

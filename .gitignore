@@ -38,6 +38,12 @@ dist-ssr
 statements/
 exports/
 !public/favicon.svg
+# App icons are the one place PNGs belong in the repo.
+!public/icons/
+!public/icons/*.png
 
 # OCR runtime, copied from node_modules at build time.
 public/tesseract/
+
+# Local Claude Code settings (personal permissions)
+.claude/settings.local.json

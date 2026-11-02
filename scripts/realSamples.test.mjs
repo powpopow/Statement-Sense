@@ -64,3 +64,17 @@ describe.skipIf(!names.length)('real statements', () => {
     })
   }
 })
+
+describe.skipIf(!names.length)('categorisation coverage on real statements', () => {
+  it('leaves no more than 20% of spending uncategorised', () => {
+    const spend = names
+      .filter((name) => expected[name])
+      .flatMap((name) => {
+        const { pages } = JSON.parse(readFileSync(path.join(dir, `${name}.json`), 'utf8'))
+        return applyRules(parseStatement(pages, `${name}.pdf`, 'f').transactions, defaultRules()).filter((t) => t.amount > 0)
+      })
+    const total = spend.reduce((s, t) => s + t.amount, 0)
+    const missed = spend.filter((t) => t.category === 'Uncategorized').reduce((s, t) => s + t.amount, 0)
+    expect(missed / total).toBeLessThan(0.2)
+  })
+})

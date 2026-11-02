@@ -7,6 +7,7 @@ export type Category =
   | 'Entertainment'
   | 'Health'
   | 'Travel'
+  | 'Gifts & Donations'
   | 'Cash & Transfers'
   | 'Fees & Interest'
   | 'Rewards & Cashback'
@@ -22,6 +23,7 @@ export const CATEGORIES: Category[] = [
   'Entertainment',
   'Health',
   'Travel',
+  'Gifts & Donations',
   'Cash & Transfers',
   'Fees & Interest',
   'Rewards & Cashback',

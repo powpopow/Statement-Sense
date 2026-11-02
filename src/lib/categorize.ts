@@ -15,6 +15,16 @@ const SEEDS: Seed[] = [
   {
     category: 'Food & Drink',
     patterns: [
+      // Added with real-statement coverage work: wording first, then chains.
+      'FOOD HALL', 'FOODHALL', 'FOOD COURT', 'FAST FOOD', 'FASTFOOD', 'GRILL',
+      'SUSHI', 'RAMEN', 'STEAK', 'NOODLE', 'KITCHEN', 'CAFE',
+      'TEA', 'JUICE', 'DESSERT', 'ICE CREAM', 'BBQ', 'BURGER',
+      'HOTPOT', 'DIM SUM', 'THAI FOOD', 'YAYOI', 'OISHI', 'SHABUSHI',
+      'FUJI', 'S&P', 'AFTER YOU', 'BONCHON', 'PIZZA COMPANY', 'SUKISHI',
+      'GENKI', 'TONCHIN', 'BINCHO', 'SALAD FACTORY', 'TRUE COFFEE', 'INTHANIN',
+      'PUNTHAI', 'BLACK CANYON', 'TOUS LES JOURS', 'TIM HORTONS', 'CHAGEE', 'CHATRAMUE',
+      'AMZ_', 'CHESTER', 'DUNKIN', 'KRISPY', 'MR.DONUT', 'MISTER DONUT',
+      'ZEN RESTAURANT',
       'STARBUCKS', 'CAFE AMAZON', 'AMAZON CAFE', 'MCDONALD', 'KFC', 'BURGER KING',
       'PIZZA', 'SWENSEN', 'DAIRY QUEEN', 'AU BON PAIN', 'COFFEE', 'BAKERY',
       'MK RESTAURANT', 'SIZZLER', 'SUKI', 'SHABU', 'RESTAURANT', 'BISTRO', 'EATERY',
@@ -25,6 +35,9 @@ const SEEDS: Seed[] = [
   {
     category: 'Groceries',
     patterns: [
+      // Added with real-statement coverage work: wording first, then chains.
+      '7-11', '7/11', 'CJ MORE', 'COP EXPRESS', 'ARI MARKET', 'FRESH MARKET',
+      'SUPERMARKET', 'HYPERMARKET', 'MINIMART', 'MINI MART',
       '7-ELEVEN', '7 ELEVEN', 'SEVEN ELEVEN', 'CP ALL', 'LOTUS', 'TESCO', 'BIG C',
       'MAKRO', 'TOPS', 'VILLA MARKET', 'GOURMET MARKET', 'FOODLAND', 'MAXVALU',
       'FAMILYMART', 'LAWSON', 'GRABMART', 'เซเว่น', 'โลตัส', 'บิ๊กซี', 'แม็คโคร', 'ตลาด',
@@ -33,6 +46,8 @@ const SEEDS: Seed[] = [
   {
     category: 'Transport',
     patterns: [
+      // Added with real-statement coverage work: wording first, then chains.
+      'PTT STATION', 'FUEL', 'GASOLINE', 'CARPARK', 'CAR PARK', 'VALET',
       'GRABCAR', 'GRABBIKE', 'GRAB TAXI', 'GRABTAXI', 'GRAB RIDE', 'WWW.GRAB.COM', 'GRAB.COM',
       'BOLT', 'INDRIVE', 'TAXI',
       'BTS', 'MRT', 'ARL', 'AIRPORT RAIL', 'SRT', 'EXPRESSWAY', 'EASY PASS', 'MPASS',
@@ -43,6 +58,10 @@ const SEEDS: Seed[] = [
   {
     category: 'Shopping',
     patterns: [
+      // Added with real-statement coverage work: wording first, then chains.
+      'ISTUDIO', 'STUDIO7', 'COM7', 'JIB COMPUTER', 'IT CITY', 'OFFICEMATE',
+      'B2S', 'SE-ED', 'KINOKUNIYA', 'DAISO', 'MINISO', 'DECATHLON',
+      'CENTRALWORLD', 'HOMEWORKS', 'GLOBAL HOUSE', 'DO HOME', 'BOOKSTORE',
       'SHOPEE', 'LAZADA', 'JD CENTRAL', 'CENTRAL', 'ROBINSON', 'THE MALL', 'SIAM PARAGON',
       'ICONSIAM', 'EMQUARTIER', 'TERMINAL 21', 'UNIQLO', 'H&M', 'ZARA', 'MUJI',
       'POWER BUY', 'BANANA IT', 'JAYMART', 'IKEA', 'HOMEPRO', 'THAIWATSADU',
@@ -61,6 +80,10 @@ const SEEDS: Seed[] = [
   {
     category: 'Entertainment',
     patterns: [
+      // Added with real-statement coverage work: wording first, then chains.
+      'APPLE.COM/BILL', 'ICLOUD', 'GAMES', 'GAMING', 'GARENA', 'RAZER',
+      'LINE STICKER', 'LINE GAMES', 'TWITCH', 'DISNEYPLUS', 'APPLE MUSIC', 'YOUTUBE PREMIUM',
+      'CINEMA', 'KARAOKE', 'CONCERT', 'THAITICKETMAJOR', 'TICKETMELON',
       'NETFLIX', 'SPOTIFY', 'YOUTUBE', 'DISNEY', 'HBO', 'VIU', 'WETV', 'IQIYI',
       'MAJOR CINEPLEX', 'SF CINEMA', 'STEAM', 'PLAYSTATION', 'NINTENDO', 'XBOX',
       'GOOGLE PLAY', 'APP STORE', 'ITUNES', 'โรงหนัง',
@@ -69,6 +92,8 @@ const SEEDS: Seed[] = [
   {
     category: 'Health',
     patterns: [
+      // Added with real-statement coverage work: wording first, then chains.
+      'DENTIST', 'OPTICAL', 'WELLNESS', 'MASSAGE', 'PHYSIO', 'กายภาพ',
       'HOSPITAL', 'CLINIC', 'BOOTS', 'WATSONS', 'PHARMACY', 'EVE AND BOY', 'DENTAL',
       'BUMRUNGRAD', 'BANGKOK HOSPITAL', 'SAMITIVEJ', 'FITNESS', 'GYM', 'VIRGIN ACTIVE',
       'โรงพยาบาล', 'คลินิก', 'ร้านขายยา', 'ฟิตเนส',
@@ -80,6 +105,13 @@ const SEEDS: Seed[] = [
       'THAI AIRWAYS', 'BANGKOK AIRWAYS', 'AIRASIA', 'NOK AIR', 'LION AIR', 'VIETJET',
       'AGODA', 'BOOKING.COM', 'AIRBNB', 'TRAVELOKA', 'EXPEDIA', 'KLOOK', 'HOTEL',
       'RESORT', 'AIRPORT', 'โรงแรม', 'สายการบิน', 'ตั๋วเครื่องบิน',
+    ],
+  },
+  {
+    category: 'Gifts & Donations',
+    patterns: [
+      'FOUNDATIO', 'DONATION', 'CHARITY', 'E-DONATION', 'TEMPLE', 'FLORIST', 'FLOWER',
+      'บริจาค', 'มูลนิธิ',
     ],
   },
   {
@@ -131,6 +163,7 @@ const CATEGORY_BASE: Record<Category, number> = {
   Shopping: 180,
   'Fees & Interest': 120,
   'Rewards & Cashback': 150,
+  'Gifts & Donations': 200,
   'Cash & Transfers': 100,
   Uncategorized: 0,
 }
@@ -163,7 +196,7 @@ export function defaultRules(): Rule[] {
  */
 const ACRONYM_RE = /^[A-Za-z]{2,4}$/
 
-function matches(rule: Rule, description: string): boolean {
+export function ruleMatches(rule: Rule, description: string): boolean {
   if (!rule.enabled || !rule.pattern) return false
   if (rule.matchType === 'regex') {
     try {
@@ -219,7 +252,7 @@ export function categorizeOne(
   options: { card?: boolean } = {},
 ): Category {
   const hits = rules
-    .filter((r) => matches(r, description))
+    .filter((r) => ruleMatches(r, description))
     .sort((a, b) => b.priority - a.priority || b.pattern.length - a.pattern.length)
 
   if (options.card && amount < 0) return categorizeCardCredit(description, hits)

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { kindOf, type TransactionKind } from '../lib/categorize'
+import { applyRules, kindOf, type TransactionKind } from '../lib/categorize'
+import { proposeRule, withLearnedRule, type RuleProposal } from '../lib/learn'
 import { lookAlikeTransactions } from '../lib/duplicates'
 import { formatMoney } from '../lib/money'
 import { formatDate } from '../lib/thaiDate'
@@ -14,6 +15,8 @@ export function Transactions({ store }: { store: AppStore }) {
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<Category | 'all' | 'flagged' | 'duplicates'>('all')
   const [whose, setWhose] = useState<string>('all')
+  // After a correction: offer to remember the merchant and fix the rest.
+  const [proposal, setProposal] = useState<RuleProposal | null>(null)
   const { people, addPerson } = usePeople(store.transactions, store.orders)
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [ascending, setAscending] = useState(false)
@@ -40,12 +43,19 @@ export function Transactions({ store }: { store: AppStore }) {
   const total = rows.reduce((s, t) => s + Math.max(0, t.amount), 0)
 
   function setCategoryFor(id: string, next: Category) {
-    store.commit({
-      transactions: store.transactions.map((t) =>
-        // Picking a category by hand locks it, so re-running rules respects it.
-        t.id === id ? { ...t, category: next, categoryLocked: true } : t,
-      ),
-    })
+    const updated = store.transactions.map((t) =>
+      // Picking a category by hand locks it, so re-running rules respects it.
+      t.id === id ? { ...t, category: next, categoryLocked: true } : t,
+    )
+    store.commit({ transactions: updated })
+    setProposal(proposeRule(updated, updated.find((t) => t.id === id)!, next, store.rules))
+  }
+
+  function acceptProposal() {
+    if (!proposal) return
+    const rules = withLearnedRule(store.rules, proposal.rule)
+    store.commit({ rules, transactions: applyRules(store.transactions, rules) })
+    setProposal(null)
   }
 
   function setOwnerFor(id: string, name: string) {
@@ -119,6 +129,23 @@ export function Transactions({ store }: { store: AppStore }) {
           </select>
         </div>
       </div>
+
+      {proposal && (
+        <div className="banner" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span>
+            Always file <strong>{proposal.rule.pattern}</strong> as <strong>{proposal.rule.category}</strong>?{' '}
+            {proposal.affects > 0
+              ? `This also fixes ${proposal.affects} other transaction${proposal.affects === 1 ? '' : 's'}.`
+              : 'It will apply to future imports.'}
+          </span>
+          <button className="primary small" onClick={acceptProposal}>
+            Yes, always
+          </button>
+          <button className="ghost small" onClick={() => setProposal(null)}>
+            No thanks
+          </button>
+        </div>
+      )}
 
       {!rows.length ? (
         <div className="empty">Nothing matches that filter.</div>

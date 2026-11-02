@@ -83,7 +83,10 @@ function dropExampleSections(pages: string[][]): { pages: string[][]; dropped: b
 const SKIP_RE = new RegExp(
   [
     'BALANCE (BROUGHT|CARRIED) FORWARD',
-    'TOTAL',
+    // A summary line, not a merchant: "TOTAL", "TOTAL BALANCE", "TOTAL FEE" —
+    // but not "TOTAL ACCESS", the legal name of a Thai phone company.
+    String.raw`\bTOTAL\b(?=\s*(?:$|[\d.,()]|BALANCE|AMOUNT|FEE|VAT|DEBIT|CREDIT|PAYMENT|SPEND|PURCHASE|DUE|NEW|INTEREST|CHARGE|FOR|OF|THIS|CASH|MIN|SUMMARY))`,
+    'SUB\\s*TOTAL',
     'SUBTOTAL',
     'STATEMENT (DATE|PERIOD)',
     'PAGE \\d',
@@ -172,6 +175,59 @@ function buildDescription(line: string, amounts: ParsedAmount[]): string {
     .trim()
 }
 
+/**
+ * The transactions table, and only that.
+ *
+ * Statements carry other tables whose rows start with a date and hold amounts:
+ * the credit-bureau report, interest calculations, points. Reading every dated
+ * line as a transaction imported a ฿628 "payment" from a bureau table. So rows
+ * count only between a table's header (or a "previous balance" line, which
+ * opens each card's section) and the next total or unrelated section.
+ *
+ * Returns null when no table opening is found at all — an OCR'd screenshot, or
+ * a bare list of rows — so those keep being read line by line.
+ */
+const TABLE_HEADER_RE =
+  /(?:TRANS(?:\.|ACTION)?\s*DATE|POST(?:ING|ED)?\s*DATE|\bDATE\b).*\b(?:DESCRIPTION|AMOUNT|DETAILS?)\b|วันที่.*รายการ/i
+const TABLE_OPENING_RE =
+  /PREVIOUS BALANCE|BALANCE BROUGHT FORWARD|OPENING BALANCE|ยอดยกมา|ยอดเรียกเก็บรอบที่แล้ว|ยอดคงเหลือยกมา/i
+const TABLE_END_RE = new RegExp(
+  [
+    String.raw`SUB\s*TOTAL`, 'TOTAL BALANCE', 'NEW BALANCE', 'TOTAL AMOUNT DUE',
+    'ยอดรวม', 'ยอดยกไป', 'สรุปยอด', 'ACCOUNT SUMMARY',
+    String.raw`POINTS?\s+(?:SUMMARY|EARNED|REDEEMED)`, String.raw`REWARDS?\s+POINT`,
+    'NCB REPORT', 'CREDIT BUREAU', 'NATIONAL CREDIT', 'เครดิตบูโร',
+    'INTEREST CALCULATION', String.raw`PAY-?IN\s*SLIP`, String.raw`PAYMENT\s*(?:FORM|SLIP)`,
+    'แบบฟอร์มการชำระเงิน', 'CARDHOLDER NAME', 'ชื่อสมาชิก',
+  ].join('|'),
+  'i',
+)
+
+function transactionLines(lines: string[]): string[] | null {
+  let opened = false
+  let inside = false
+  const kept: string[] = []
+
+  for (const line of lines) {
+    const looksLikeRow = LEADING_DATE_RE.test(normalizeThaiDigits(line))
+    // Only a line that is not itself a row can open or close a table, so a
+    // merchant called "TOTAL ACCESS" cannot end one.
+    if (!looksLikeRow) {
+      if (TABLE_HEADER_RE.test(line) || TABLE_OPENING_RE.test(line)) {
+        inside = true
+        opened = true
+        continue
+      }
+      if (TABLE_END_RE.test(line)) {
+        inside = false
+        continue
+      }
+    }
+    if (inside) kept.push(line)
+  }
+  return opened ? kept : null
+}
+
 function collectRows(lines: string[], fallbackYear?: number): CandidateRow[] {
   const rows: CandidateRow[] = []
   for (const line of lines) {
@@ -229,6 +285,8 @@ export interface StatementParseOutput {
   warnings: string[]
   detectedFormat: string
   kind: StatementKind
+  /** Which issuer the statement came from (see BANK_PROFILES), or null if unrecognised. */
+  bankId: string | null
 }
 
 /**
@@ -241,7 +299,7 @@ export function parseStatement(
   sourceFile: string,
   idPrefix: string,
 ): StatementParseOutput {
-  const detection = detectStatement(inputPages.flat().join('\n'))
+  const detection = detectStatement(inputPages.flat())
 
   const { pages, dropped } = dropExampleSections(inputPages)
   const lines = pages.flat()
@@ -254,7 +312,7 @@ export function parseStatement(
     )
   }
 
-  const rows = collectRows(lines, year)
+  const rows = collectRows(transactionLines(lines) ?? lines, year)
   if (!rows.length) {
     return {
       transactions: [],
@@ -263,6 +321,7 @@ export function parseStatement(
       ],
       detectedFormat: detection.label,
       kind: detection.kind,
+      bankId: detection.bank?.id ?? null,
     }
   }
 
@@ -337,5 +396,11 @@ export function parseStatement(
     warnings.push('No statement year found in the header; dates written without a year may be wrong.')
   }
 
-  return { transactions, warnings, detectedFormat: detection.label, kind: detection.kind }
+  return {
+    transactions,
+    warnings,
+    detectedFormat: detection.label,
+    kind: detection.kind,
+    bankId: detection.bank?.id ?? null,
+  }
 }

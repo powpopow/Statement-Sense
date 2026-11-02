@@ -37,6 +37,8 @@ dist-ssr
 *.tsv
 statements/
 exports/
+# Text extracted from real statements, for local parser tests only.
+fixtures/
 !public/favicon.svg
 # App icons are the one place PNGs belong in the repo.
 !public/icons/

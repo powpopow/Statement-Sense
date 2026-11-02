@@ -57,13 +57,18 @@ export function findAmounts(line: string): ParsedAmount[] {
     const token = m[0]
     // Skip bare integers that are too short to be money and look like counts.
     if (!/[.,]\d{2}\b/.test(token) && !/\d{1,3}(,\d{3})+/.test(token)) continue
-    const value = parseAmountToken(token)
-    if (value === null) continue
+    const parsed = parseAmountToken(token)
+    if (parsed === null) continue
+    // Some statements print the credit sign as its own column: "Payment - 628.11".
+    // A dash standing alone, with space on both sides, directly before an amount
+    // is that sign, not a separator. (Merchant text never ends in a bare dash
+    // followed by a money amount.)
+    const loneMinus = parsed > 0 && /(?:^|\s)[-–−]\s+$/.test(s.slice(0, m.index ?? 0))
     out.push({
-      value,
+      value: loneMinus ? -parsed : parsed,
       index: m.index ?? 0,
       length: token.length,
-      negativeNotation: /^\(/.test(token) || /-$/.test(token) || /^-/.test(token),
+      negativeNotation: loneMinus || /^\(/.test(token) || /-$/.test(token) || /^-/.test(token),
     })
   }
   return out

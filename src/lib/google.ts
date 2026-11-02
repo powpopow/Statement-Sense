@@ -13,6 +13,8 @@ const GIS_SRC = 'https://accounts.google.com/gsi/client'
 const SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/spreadsheets',
+  // Lets the access gate read the signed-in email. Non-sensitive scope.
+  'https://www.googleapis.com/auth/userinfo.email',
 ].join(' ')
 
 export const CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '').trim()
@@ -69,7 +71,8 @@ interface StoredToken {
   expiresAt: number
 }
 
-const TOKEN_KEY = 'statement-sense.token'
+// Bump the suffix when SCOPES change so a stored token from before is ignored.
+const TOKEN_KEY = 'statement-sense.token.v2'
 
 function readStoredToken(): StoredToken | null {
   try {

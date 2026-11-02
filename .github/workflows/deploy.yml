@@ -31,6 +31,7 @@ jobs:
           # A browser OAuth client ID is public by design; it is restricted by
           # the authorised JavaScript origins you set in Google Cloud Console.
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          VITE_ALLOWED_EMAILS: ${{ vars.VITE_ALLOWED_EMAILS }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

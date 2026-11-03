@@ -405,7 +405,8 @@ export function parseStatement(
             const net = mine.reduce((sum, t) => sum + t.amount, 0)
             const paid = mine.reduce((sum, t) => (kindOf(t) === 'payment' ? sum - t.amount : sum), 0)
             const closing = sec.closing ?? (sections.length === 1 ? documentClosing(lines) : undefined)
-            return { sec, rows: mine.length, check: reconcile({ ...sec, closing }, net, paid) }
+            const periodEnd = mine.map((t) => t.postedDate ?? t.date).sort().pop()
+            return { sec, rows: mine.length, check: { ...reconcile({ ...sec, closing }, net, paid), periodEnd } }
           })
           // A heading with nothing under it, and no balances, is not a card.
           .filter(({ sec, rows: n }) => n > 0 || sec.opening !== undefined || sec.closing !== undefined)

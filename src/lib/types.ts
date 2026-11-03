@@ -91,6 +91,25 @@ export interface Order {
  * month end. It stands for personal spending with no detail below it, so it
  * counts as spending in that month and nothing more is tracked.
  */
+/**
+ * What one card's statement said about its balance, kept so that consecutive
+ * statements can be checked against each other (see chain.ts).
+ */
+export interface StatementRecord {
+  /** bank + card + period end + closing, so importing the same statement twice adds nothing. */
+  id: string
+  bank: string
+  last4: string
+  /** Latest date among the statement's rows: a stand-in for the statement date. */
+  periodEnd: string
+  /** Printed previous balance, when the bank prints one. */
+  opening?: number
+  closing: number
+  /** This period's activity: purchases positive, credits and payments negative. */
+  net: number
+  sourceFile: string
+}
+
 export interface CashEntry {
   /** The month it covers, as YYYY-MM. One entry per month. */
   month: string

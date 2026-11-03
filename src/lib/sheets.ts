@@ -6,7 +6,7 @@
  * supported way to retrain categorisation.
  */
 import { googleFetch } from './google'
-import type { CashEntry, Category, Order, Rule, Transaction } from './types'
+import type { CashEntry, Category, StatementRecord, Order, Rule, Transaction } from './types'
 
 const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets'
 const DRIVE_API = 'https://www.googleapis.com/drive/v3/files'
@@ -29,11 +29,14 @@ const RULE_HEADERS = ['id', 'pattern', 'matchType', 'category', 'priority', 'ena
 /** One row per month: the cash the user states at month end. */
 const CASH_HEADERS = ['month', 'amount', 'note'] as const
 
+const STATEMENT_HEADERS = ['id', 'bank', 'last4', 'periodEnd', 'opening', 'closing', 'net', 'sourceFile'] as const
+
 export const TABS = {
   transactions: 'Transactions',
   orders: 'Orders',
   rules: 'Rules',
   cash: 'Cash',
+  statements: 'Statements',
 } as const
 
 export function getSavedSpreadsheetId(): string | null {
@@ -125,6 +128,7 @@ export async function createSpreadsheet(): Promise<string> {
         { properties: { title: TABS.orders, gridProperties: { frozenRowCount: 1 } } },
         { properties: { title: TABS.rules, gridProperties: { frozenRowCount: 1 } } },
         { properties: { title: TABS.cash, gridProperties: { frozenRowCount: 1 } } },
+        { properties: { title: TABS.statements, gridProperties: { frozenRowCount: 1 } } },
       ],
     }),
   })
@@ -140,6 +144,7 @@ export async function createSpreadsheet(): Promise<string> {
         { range: `${TABS.orders}!A1`, values: [ORDER_HEADERS as unknown as string[]] },
         { range: `${TABS.rules}!A1`, values: [RULE_HEADERS as unknown as string[]] },
         { range: `${TABS.cash}!A1`, values: [CASH_HEADERS as unknown as string[]] },
+        { range: `${TABS.statements}!A1`, values: [STATEMENT_HEADERS as unknown as string[]] },
       ],
     }),
   })
@@ -232,6 +237,36 @@ export async function readCash(spreadsheetId: string): Promise<CashEntry[]> {
     const amount = num(get('amount'))
     if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month) || amount <= 0) return null
     return { month, amount, ...(get('note') ? { note: get('note') } : {}) }
+  })
+}
+
+export async function writeStatements(spreadsheetId: string, statements: StatementRecord[]) {
+  await ensureTab(spreadsheetId, TABS.statements, STATEMENT_HEADERS)
+  await writeHeaders(spreadsheetId, TABS.statements, STATEMENT_HEADERS)
+  await clearTab(spreadsheetId, TABS.statements)
+  await appendRows(spreadsheetId, TABS.statements, statements.map((s) => toRow(s, STATEMENT_HEADERS)))
+}
+
+export async function readStatements(spreadsheetId: string): Promise<StatementRecord[]> {
+  let values: string[][]
+  try {
+    values = await readTab(spreadsheetId, TABS.statements)
+  } catch (error) {
+    if (/Unable to parse range|Requested entity was not found/i.test((error as Error).message)) return []
+    throw error
+  }
+  return fromRows<StatementRecord>(values, (get) => {
+    if (!get('id') || !get('last4') || !get('periodEnd') || get('closing') === '') return null
+    return {
+      id: get('id'),
+      bank: get('bank'),
+      last4: get('last4'),
+      periodEnd: get('periodEnd'),
+      ...(get('opening') !== '' ? { opening: num(get('opening')) } : {}),
+      closing: num(get('closing')),
+      net: num(get('net')),
+      sourceFile: get('sourceFile'),
+    }
   })
 }
 

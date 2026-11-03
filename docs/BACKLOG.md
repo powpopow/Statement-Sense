@@ -65,7 +65,7 @@ Status: ☐ open · ◐ in progress · ☑ done · ✋ waiting on a decision · 
 | SS-123 | P2 | S | Order text clean-up: OCR noise, ฿→B remnants, drop "Group Order by <name>", keep Shopee shop and product separate, keep Grab time of day | ☐ |
 | SS-124 | P3 | M | Shopee lists show no date: ask for the order-detail screen, or accept amount-only matching | ☐ |
 | SS-125 | P1 | M | **Real-fixture tests**: run every real sample through parser + reconciliation (fixtures stay local / private, never in the public repo) | ◐ harness + first fixtures done 2026-11-03 |
-| SS-126 | P1 | M | **Statement chain check**: a statement's opening balance must equal the previous statement's closing balance for the same account; a mismatch means a statement is missing. Verified on two consecutive real statements | ☐ |
+| SS-126 | P1 | M | **Statement chain check**: a statement's opening balance must equal the previous statement's closing balance for the same account; a mismatch means a statement is missing. Verified on two consecutive real statements | ☑ |
 | SS-127 | P1 | M | **Thai account-statement layout**: read the printed control totals (`ยอดยกมา`, `รวมถอนเงิน N รายการ`, `รวมฝากเงิน N รายการ`, `ยอดยกไป`) and reconcile counts, sums and closing balance. Verified on a real savings file | ⏸ |
 | SS-128 | P1 | M | **Transfer parsing**: direction, counterparty bank + last 4 digits (stable key), truncated name (`++`), channel; merchant name after `Ref X####` for QR payments | ⏸ |
 | SS-129 | P1 | S | Append **wrapped description lines** to the row above (12+ in one statement lose their second line today) | ☐ |

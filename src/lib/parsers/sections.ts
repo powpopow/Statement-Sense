@@ -158,6 +158,8 @@ export interface Reconciliation {
   closing?: number
   /** This period's rows: spending positive, credits negative. */
   net: number
+  /** Latest date among this card's rows (YYYY-MM-DD): a stand-in for the statement date. */
+  periodEnd?: string
   /** closing − (opening + net). Zero when it adds up. */
   difference?: number
   detail: string

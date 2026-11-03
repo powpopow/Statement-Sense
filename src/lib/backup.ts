@@ -6,7 +6,7 @@
  * state, CSV is for reading the transactions in Excel or Sheets by hand.
  */
 import { ownerOf } from './people'
-import type { CashEntry, Order, Rule, Transaction } from './types'
+import type { CashEntry, StatementRecord, Order, Rule, Transaction } from './types'
 
 /** Bumped only if the shape changes in a way a restore has to handle. */
 const BACKUP_VERSION = 1
@@ -20,6 +20,7 @@ export interface Backup {
   rules: Rule[]
   /** Absent in backups made before cash existed. */
   cash?: CashEntry[]
+  statements?: StatementRecord[]
 }
 
 function download(filename: string, content: string, mime: string) {
@@ -34,7 +35,7 @@ function download(filename: string, content: string, mime: string) {
 
 const stamp = () => new Date().toISOString().slice(0, 10)
 
-export function exportJson(transactions: Transaction[], orders: Order[], rules: Rule[], cash: CashEntry[] = []) {
+export function exportJson(transactions: Transaction[], orders: Order[], rules: Rule[], cash: CashEntry[] = [], statements: StatementRecord[] = []) {
   const backup: Backup = {
     app: 'statement-sense',
     version: BACKUP_VERSION,
@@ -43,6 +44,7 @@ export function exportJson(transactions: Transaction[], orders: Order[], rules: 
     orders,
     rules,
     cash,
+    statements,
   }
   download(`statement-sense-backup-${stamp()}.json`, JSON.stringify(backup, null, 2), 'application/json')
 }
@@ -123,5 +125,6 @@ export async function readBackup(file: File): Promise<Backup> {
     orders: backup.orders as Order[],
     rules: backup.rules as Rule[],
     cash: Array.isArray(backup.cash) ? (backup.cash as CashEntry[]) : [],
+    statements: Array.isArray(backup.statements) ? (backup.statements as StatementRecord[]) : [],
   }
 }

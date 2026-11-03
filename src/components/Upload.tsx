@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { importFile, dedupeOrders, dedupeTransactions, type ImportKind, type ImportOutcome } from '../lib/import'
 import { lookAlikeOrders, lookAlikeTransactions } from '../lib/duplicates'
+import { addStatement, chainLinks } from '../lib/chain'
 import { formatMoney } from '../lib/money'
 import type { AppStore } from '../lib/store'
 import { openOcrSession, type OcrSession } from '../lib/extract'
@@ -50,6 +51,7 @@ export function Upload({ store, onDone }: Props) {
       const results: ImportSummary[] = []
       let nextTransactions = store.transactions
       let nextOrders = store.orders
+      let nextStatements = store.statements
 
       for (let i = 0; i < list.length; i++) {
         const file = list[i]
@@ -84,6 +86,19 @@ export function Upload({ store, onDone }: Props) {
         if (skippedOrders) outcome.warnings.push(`${skippedOrders} order${skippedOrders === 1 ? '' : 's'} already imported, skipped.`)
 
         nextTransactions = [...nextTransactions, ...freshTransactions]
+        for (const check of outcome.reconciliation) {
+          if (!outcome.bankId || !check.last4 || !check.periodEnd || check.closing === undefined) continue
+          nextStatements = addStatement(nextStatements, {
+            id: `${outcome.bankId}|${check.last4}|${check.periodEnd}|${check.closing}`,
+            bank: outcome.bankId,
+            last4: check.last4,
+            periodEnd: check.periodEnd,
+            ...(check.opening !== undefined ? { opening: check.opening } : {}),
+            closing: check.closing,
+            net: check.net,
+            sourceFile: outcome.fileName,
+          })
+        }
         nextOrders = [...nextOrders, ...freshOrders]
 
         // Not identical, but the same day and amount with near-identical text from
@@ -117,7 +132,7 @@ export function Upload({ store, onDone }: Props) {
 
       await ocr?.close()
 
-      store.commit({ transactions: nextTransactions, orders: nextOrders })
+      store.commit({ transactions: nextTransactions, orders: nextOrders, statements: nextStatements })
       setOutcomes(results)
       setProgress(null)
       setBusy(false)
@@ -314,6 +329,28 @@ export function Upload({ store, onDone }: Props) {
           ))}
         </div>
       )}
+      <ChainPanel links={chainLinks(store.statements)} />
     </>
+  )
+}
+
+/** Do consecutive statements of a card join up? Only shown once there are two to compare. */
+function ChainPanel({ links }: { links: ReturnType<typeof chainLinks> }) {
+  if (!links.length) return null
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="card-head">
+        <h2>Statement chain</h2>
+        <span className="small muted">Each statement should open where the last one closed</span>
+      </div>
+      {links.map((l) => (
+        <div key={`${l.from.id}>${l.to.id}`} className={l.status === 'break' ? 'banner error' : 'banner'}>
+          <strong>
+            {l.status === 'matches' ? '✓ Joins up' : l.status === 'break' ? '⚠ Does not join up' : 'Month missing'}
+          </strong>{' '}
+          {l.card}, to {l.to.periodEnd}: {l.detail}
+        </div>
+      ))}
+    </div>
   )
 }

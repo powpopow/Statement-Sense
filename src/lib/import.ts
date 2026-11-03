@@ -17,6 +17,8 @@ export interface ImportOutcome {
   warnings: string[]
   /** For card statements: does each card's activity add up to the balance the bank printed? */
   reconciliation: Reconciliation[]
+  /** Which bank issued a statement, when recognised. */
+  bankId?: string | null
   /** Set when the file could not be read at all. */
   error?: string
   /**
@@ -145,6 +147,7 @@ export async function importFile(
       orders: [],
       warnings: result.warnings,
       reconciliation: result.reconciliation,
+      bankId: result.bankId,
       ...(result.transactions.length ? {} : { sampleText: lines.slice(0, 25) }),
     }
   } catch (error) {

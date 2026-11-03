@@ -62,6 +62,10 @@ export interface Transaction {
   matchedOrderId?: string
   /** Whose money this was. Absent means yours; see people.ts. */
   owner?: string
+  /** Which card, e.g. "uob-1111": the issuer and the card's last four digits. */
+  account?: string
+  /** The same, for people: "UOB ••1111". */
+  accountName?: string
 }
 
 /** A line item from a Shopee / Grab / Lazada order export or screenshot. */

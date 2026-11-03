@@ -3,6 +3,7 @@ import { extractFile, PdfPasswordRequired, type OcrSession } from './extract'
 import { parseStatement } from './parsers/statement'
 import { parseOrders, detectPlatform } from './parsers/orders'
 import { applyRules } from './categorize'
+import type { Reconciliation } from './parsers/sections'
 import type { Order, Rule, Transaction } from './types'
 
 export type ImportKind = 'statement' | 'orders'
@@ -14,6 +15,8 @@ export interface ImportOutcome {
   transactions: Transaction[]
   orders: Order[]
   warnings: string[]
+  /** For card statements: does each card's activity add up to the balance the bank printed? */
+  reconciliation: Reconciliation[]
   /** Set when the file could not be read at all. */
   error?: string
   /**
@@ -99,6 +102,7 @@ export async function importFile(
       transactions: [],
       orders: [],
       warnings: [],
+      reconciliation: [],
       error: unsupported,
     }
   }
@@ -127,6 +131,7 @@ export async function importFile(
         transactions: [],
         orders: result.orders,
         warnings: result.warnings,
+        reconciliation: [],
         ...(result.orders.length ? {} : { sampleText: lines.slice(0, 25) }),
       }
     }
@@ -139,6 +144,7 @@ export async function importFile(
       transactions: applyRules(result.transactions, rules),
       orders: [],
       warnings: result.warnings,
+      reconciliation: result.reconciliation,
       ...(result.transactions.length ? {} : { sampleText: lines.slice(0, 25) }),
     }
   } catch (error) {
@@ -148,6 +154,7 @@ export async function importFile(
       transactions: [],
       orders: [],
       warnings: [],
+      reconciliation: [],
     }
     if (error instanceof PdfPasswordRequired) {
       return {

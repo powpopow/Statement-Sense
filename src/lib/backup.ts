@@ -58,7 +58,7 @@ function toCsv(headers: string[], rows: unknown[][]): string {
 
 export function exportTransactionsCsv(transactions: Transaction[]) {
   const csv = toCsv(
-    ['Date', 'Posted', 'Description', 'Category', 'Amount (THB)', 'Direction', 'Confidence', 'Source file', 'For'],
+    ['Date', 'Posted', 'Description', 'Category', 'Amount (THB)', 'Direction', 'Confidence', 'Source file', 'Card', 'For'],
     transactions.map((t) => [
       t.date,
       t.postedDate ?? '',
@@ -68,6 +68,7 @@ export function exportTransactionsCsv(transactions: Transaction[]) {
       t.amount < 0 ? 'in' : 'out',
       t.confidence.toFixed(2),
       t.sourceFile,
+      t.accountName ?? '',
       ownerOf(t),
     ]),
   )

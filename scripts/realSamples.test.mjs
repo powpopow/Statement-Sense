@@ -57,6 +57,12 @@ describe.skipIf(!names.length)('real statements', () => {
         expect(filed.filter((x) => x.amount < 0 && x.category === 'Income')).toHaveLength(0)
       })
 
+      it('identifies every card and checks each against its printed balance', () => {
+        if (!want.cards) return
+        expect(result.reconciliation.map(({ last4, status }) => ({ last4, status }))).toEqual(want.cards)
+        expect(result.transactions.every((t) => t.account && t.accountName)).toBe(true)
+      })
+
       it('gets spending and credits to the satang', () => {
         expect(sum(result.transactions.filter((t) => t.amount > 0))).toBe(want.spend)
         expect(-sum(result.transactions.filter((t) => t.amount < 0))).toBe(want.credits)
@@ -76,5 +82,39 @@ describe.skipIf(!names.length)('categorisation coverage on real statements', () 
     const total = spend.reduce((s, t) => s + t.amount, 0)
     const missed = spend.filter((t) => t.category === 'Uncategorized').reduce((s, t) => s + t.amount, 0)
     expect(missed / total).toBeLessThan(0.2)
+  })
+})
+
+// The balance check is only worth having if it notices damage. Break a real statement on purpose.
+describe.skipIf(!names.includes('uob-3cards'))('the balance check on a damaged real statement', () => {
+  const { pages } = JSON.parse(readFileSync(path.join(dir, 'uob-3cards.json'), 'utf8'))
+  const original = parseStatement(pages, 'original.pdf', 'f')
+  // A purchase on the first card, found by its own text so nothing here is hard-coded.
+  const target = original.transactions.find((t) => t.account === original.transactions[0].account && t.amount > 0)
+  const money = (n) => n.toLocaleString('en-US', { minimumFractionDigits: 2 })
+
+  const damage = (edit) => {
+    const copy = pages.map((p) => [...p])
+    for (const page of copy) {
+      const i = page.findIndex((l) => l.includes(target.description.slice(0, 14)) && l.includes(money(target.amount)))
+      if (i >= 0) {
+        edit(page, i)
+        break
+      }
+    }
+    return parseStatement(copy, 'damaged.pdf', 'f').reconciliation
+  }
+
+  it('notices a deleted row, naming the card and the amount', () => {
+    const checks = damage((page, i) => page.splice(i, 1))
+    expect(checks[0]).toMatchObject({ status: 'mismatch', last4: original.reconciliation[0].last4, difference: target.amount })
+    expect(checks.slice(1).every((c) => c.status === 'verified')).toBe(true)
+  })
+
+  it('notices an amount that is off by 10 baht', () => {
+    const checks = damage((page, i) => {
+      page[i] = page[i].replace(money(target.amount), money(target.amount + 10))
+    })
+    expect(checks[0]).toMatchObject({ status: 'mismatch', difference: -10 })
   })
 })

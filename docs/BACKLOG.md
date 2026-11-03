@@ -35,9 +35,9 @@ Status: ☐ open · ◐ in progress · ☑ done · ✋ waiting on a decision · 
 
 | ID | P | Size | Item | Status |
 |---|---|---|---|---|
-| SS-101 | P1 | M | **Accounts**: type + store; detect bank and last 4 digits from a statement; per-account default owner | ☐ |
+| SS-101 | P1 | M | **Accounts**: type + store; detect bank and last 4 digits from a statement; per-account default owner | ◐ every card row carries account + accountName; no Accounts table yet |
 | SS-102 | P1 | M | **Deterministic ids** for transactions and orders (content hash + occurrence index); migrate existing rows | ☐ |
-| SS-103 | P1 | L | **Reconciliation**: opening + movements = closing (accounts); previous − payments + purchases = new balance (cards); result stored per import | ☐ |
+| SS-103 | P1 | L | **Reconciliation**: opening + movements = closing (accounts); previous − payments + purchases = new balance (cards); result stored per import | ☑ 2026-11-03 (cards; account statements are parked) |
 | SS-104 | P1 | L | **Import preview**: new / already there / changed / needs attention; choose account and owner for the file; commit on confirm | ☐ |
 | SS-105 | P1 | M | **Edit any field** of a row; **add a row by hand** (cash); delete with undo | ☐ |
 | SS-106 | P1 | L | **IndexedDB local store** + outbox (replaces `localStorage`); migration from the old cache | ☐ |
@@ -54,7 +54,7 @@ Status: ☐ open · ◐ in progress · ☑ done · ✋ waiting on a decision · 
 | SS-112 | P0 | S | Sign handling: a lone `-` before an amount (`Payment … - 500.00`) is a credit | ☑ 2026-11-03 |
 | SS-113 | P0 | M | **Rows only from the transactions table** (between the column header and SUB TOTAL / TOTAL); stop importing credit-bureau, points and interest tables | ☑ 2026-11-03 |
 | SS-114 | P1 | M | Read **both dates** using the table header's column order (UOB post→trans, others trans→post); `date` = purchase date, posting date kept | ☑ 2026-11-03 |
-| SS-115 | P1 | M | **Card sections** in one PDF (product name + masked number) → one Account each, reconciled separately (UOB: 3 cards) | ☐ |
+| SS-115 | P1 | M | **Card sections** in one PDF (product name + masked number) → one Account each, reconciled separately (UOB: 3 cards) | ☑ 2026-11-03 |
 | SS-116 | P1 | M | **Credit kinds**: card payment (transfer), refund / points offset (nets against the merchant's category), cashback, fee refund — not all "Income" | ☑ 2026-11-03 |
 | SS-117 | P2 | S | Strip trailing `THB` / country code from descriptions; use them for foreign-spend detection | ☐ |
 | SS-118 | P2 | S | Statement year from 2-digit-year dates (`14 Oct 26`); Dec→Jan year roll-over | ☐ |
@@ -134,6 +134,9 @@ Status: ☐ open · ◐ in progress · ☑ done · ✋ waiting on a decision · 
 - Duplicate flags with a real overlapping screenshot pair (shipped 2026-11-03, not yet tried).
 
 ## Lessons learned
+- *2026-11-03:* the balance check (previous + activity = closing) is the only thing that proves a parse is complete. It must name the card and the missing amount, and it must be tested by *damaging* a real statement, not only by passing one.
+- *2026-11-03:* a section's card number often comes *after* its table header, and the header can be preceded by another card's number in a points table. Take the nearest number before the first row; count rows, not lines.
+- *2026-11-03:* process: invented test data must not reuse real card digits or merchants. Scan the staged diff for them before every commit (it caught both this time).
 - *2026-11-03:* "Money in" on a card is not income. Payments to the card are transfers, refunds reverse a charge (and net against it), cashback is a reward. Three different things; the old code called them all Income and the totals were nonsense.
 - *2026-11-03:* a refund only nets against its merchant if both sides get the *same* merchant label (`PWP: WWW.GRAB.COM` vs `WWW.GRAB.COM BANGKOK`). Group by a normalised merchant, never by the raw description.
 - *2026-11-03:* never identify the issuer by "a bank's name appears anywhere in the text": pay-in slips list every bank and merchant rows name banks (`Payment-SCB…`). Score the letterhead only, weight identifiers the issuer alone prints, and skip rows and everything after the payment slip.

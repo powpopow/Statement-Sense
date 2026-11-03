@@ -283,6 +283,14 @@ export function Upload({ store, onDone }: Props) {
                   {w}
                 </div>
               ))}
+              {outcome.reconciliation.map((check, i) => (
+                <div key={`check-${i}`} className={check.status === 'mismatch' ? 'banner error' : 'banner'}>
+                  <strong>
+                    {check.status === 'verified' ? '✓ Adds up' : check.status === 'mismatch' ? '⚠ Does not add up' : 'Not checked'}
+                  </strong>
+                  {check.last4 && ` · card ••${check.last4}`} — {check.detail}
+                </div>
+              ))}
               {!outcome.error && !outcome.parsedCount && outcome.sampleText?.length && (
                 <details className="banner" style={{ marginTop: 8 }}>
                   <summary style={{ cursor: 'pointer' }}>What the recogniser actually read</summary>

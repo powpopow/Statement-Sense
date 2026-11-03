@@ -16,7 +16,7 @@ export const SPREADSHEET_NAME = 'Statement Sense Data'
 const TX_HEADERS = [
   'id', 'date', 'postedDate', 'description', 'amount', 'currency',
   'foreignAmount', 'foreignCurrency', 'category', 'categoryLocked',
-  'source', 'sourceFile', 'confidence', 'notes', 'matchedOrderId', 'owner',
+  'source', 'sourceFile', 'confidence', 'notes', 'matchedOrderId', 'owner', 'account', 'accountName',
 ] as const
 
 const ORDER_HEADERS = [
@@ -213,6 +213,8 @@ export async function readTransactions(spreadsheetId: string): Promise<Transacti
       notes: get('notes') || undefined,
       matchedOrderId: get('matchedOrderId') || undefined,
       owner: get('owner') || undefined,
+      account: get('account') || undefined,
+      accountName: get('accountName') || undefined,
     }
   })
 }

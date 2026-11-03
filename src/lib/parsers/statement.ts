@@ -15,7 +15,9 @@
 import { findAmounts, detectCurrency, type ParsedAmount } from '../money'
 import { parseThaiDate, findStatementYear, normalizeThaiDigits } from '../thaiDate'
 import type { Transaction } from '../types'
+import { kindOf } from '../categorize'
 import { detectStatement, type StatementKind } from './banks'
+import { documentClosing, reconcile, splitSections, type Reconciliation, type Section } from './sections'
 
 /**
  * A line is a candidate row only if a date sits near its start.
@@ -110,6 +112,8 @@ const CREDIT_RE = new RegExp(
 const BROUGHT_FORWARD_RE = /BALANCE BROUGHT FORWARD|OPENING BALANCE|ยอดยกมา|ยอดคงเหลือยกมา/i
 
 interface CandidateRow {
+  /** Index of the card section this row came from. */
+  section: number
   line: string
   /** The purchase date. */
   date: string
@@ -208,60 +212,7 @@ function buildDescription(line: string, amounts: ParsedAmount[]): string {
     .trim()
 }
 
-/**
- * The transactions table, and only that.
- *
- * Statements carry other tables whose rows start with a date and hold amounts:
- * the credit-bureau report, interest calculations, points. Reading every dated
- * line as a transaction imported a ฿628 "payment" from a bureau table. So rows
- * count only between a table's header (or a "previous balance" line, which
- * opens each card's section) and the next total or unrelated section.
- *
- * Returns null when no table opening is found at all — an OCR'd screenshot, or
- * a bare list of rows — so those keep being read line by line.
- */
-const TABLE_HEADER_RE =
-  /(?:TRANS(?:\.|ACTION)?\s*DATE|POST(?:ING|ED)?\s*DATE|\bDATE\b).*\b(?:DESCRIPTION|AMOUNT|DETAILS?)\b|วันที่.*รายการ/i
-const TABLE_OPENING_RE =
-  /PREVIOUS BALANCE|BALANCE BROUGHT FORWARD|OPENING BALANCE|ยอดยกมา|ยอดเรียกเก็บรอบที่แล้ว|ยอดคงเหลือยกมา/i
-const TABLE_END_RE = new RegExp(
-  [
-    String.raw`SUB\s*TOTAL`, 'TOTAL BALANCE', 'NEW BALANCE', 'TOTAL AMOUNT DUE',
-    'ยอดรวม', 'ยอดยกไป', 'สรุปยอด', 'ACCOUNT SUMMARY',
-    String.raw`POINTS?\s+(?:SUMMARY|EARNED|REDEEMED)`, String.raw`REWARDS?\s+POINT`,
-    'NCB REPORT', 'CREDIT BUREAU', 'NATIONAL CREDIT', 'เครดิตบูโร',
-    'INTEREST CALCULATION', String.raw`PAY-?IN\s*SLIP`, String.raw`PAYMENT\s*(?:FORM|SLIP)`,
-    'แบบฟอร์มการชำระเงิน', 'CARDHOLDER NAME', 'ชื่อสมาชิก',
-  ].join('|'),
-  'i',
-)
-
-function transactionLines(lines: string[]): string[] | null {
-  let opened = false
-  let inside = false
-  const kept: string[] = []
-
-  for (const line of lines) {
-    const looksLikeRow = LEADING_DATE_RE.test(normalizeThaiDigits(line))
-    // Only a line that is not itself a row can open or close a table, so a
-    // merchant called "TOTAL ACCESS" cannot end one.
-    if (!looksLikeRow) {
-      if (TABLE_HEADER_RE.test(line) || TABLE_OPENING_RE.test(line)) {
-        inside = true
-        opened = true
-        continue
-      }
-      if (TABLE_END_RE.test(line)) {
-        inside = false
-        continue
-      }
-    }
-    if (inside) kept.push(line)
-  }
-  return opened ? kept : null
-}
-
-function collectRows(lines: string[], fallbackYear?: number, order: DateOrder = 'trans-first'): CandidateRow[] {
+function collectRows(lines: string[], fallbackYear?: number, order: DateOrder = 'trans-first', section = 0): CandidateRow[] {
   const rows: CandidateRow[] = []
   for (const line of lines) {
     if (!line.trim() || SKIP_RE.test(line) || MALFORMED_DATE_RE.test(line)) continue
@@ -273,7 +224,7 @@ function collectRows(lines: string[], fallbackYear?: number, order: DateOrder = 
     const [first, second] = dates
     const date = second && order === 'post-first' ? second : first
     const postedDate = second ? (order === 'post-first' ? first : second) : undefined
-    rows.push({ line, date, postedDate, description: buildDescription(line, amounts), amounts })
+    rows.push({ section, line, date, postedDate, description: buildDescription(line, amounts), amounts })
   }
   return rows
 }
@@ -320,6 +271,8 @@ export interface StatementParseOutput {
   warnings: string[]
   detectedFormat: string
   kind: StatementKind
+  /** One check per card on the statement: do the rows add up to the balance the bank printed? Cards only. */
+  reconciliation: Reconciliation[]
   /** Which issuer the statement came from (see BANK_PROFILES), or null if unrecognised. */
   bankId: string | null
 }
@@ -347,7 +300,11 @@ export function parseStatement(
     )
   }
 
-  const rows = collectRows(transactionLines(lines) ?? lines, year, detectDateOrder(lines))
+  // One section per card table; a bare list of rows (OCR) is read line by line.
+  const isRowLine = (line: string) => LEADING_DATE_RE.test(normalizeThaiDigits(line))
+  const sections = splitSections(lines, isRowLine)
+  const order = detectDateOrder(lines)
+  const rows = (sections ?? [{ lines } as Section]).flatMap((sec, i) => collectRows(sec.lines, year, order, i))
   if (!rows.length) {
     return {
       transactions: [],
@@ -356,6 +313,7 @@ export function parseStatement(
       ],
       detectedFormat: detection.label,
       kind: detection.kind,
+      reconciliation: [],
       bankId: detection.bank?.id ?? null,
     }
   }
@@ -363,6 +321,7 @@ export function parseStatement(
   const openingBalance = findOpeningBalance(lines)
   const hasBalance = detectBalanceColumn(rows, openingBalance)
   const transactions: Transaction[] = []
+  const sectionOf: number[] = [] // which section each transaction came from, aligned with `transactions`
   let previousBalance: number | null = hasBalance ? openingBalance : null
   let lowConfidenceCount = 0
 
@@ -404,6 +363,8 @@ export function parseStatement(
     const foreignCurrency = detectCurrency(row.line)
     const description = row.description || '(no description)'
 
+    const card = detection.kind === 'card' ? sections?.[row.section]?.last4 : undefined
+    sectionOf.push(row.section)
     transactions.push({
       id: `${idPrefix}-t${i}`,
       date: row.date,
@@ -417,6 +378,9 @@ export function parseStatement(
       source: detection.label,
       sourceFile,
       confidence,
+      ...(card
+        ? { account: `${detection.bank?.id ?? 'card'}-${card}`, accountName: `${detection.bank?.short ?? 'Card'} ••${card}` }
+        : {}),
     })
   })
 
@@ -432,11 +396,27 @@ export function parseStatement(
     warnings.push('No statement year found in the header; dates written without a year may be wrong.')
   }
 
+  // Cards: does each card's activity add up to the balance the bank printed?
+  const reconciliation: Reconciliation[] =
+    detection.kind === 'card' && sections
+      ? sections
+          .map((sec, index) => {
+            const mine = transactions.filter((_, t) => sectionOf[t] === index)
+            const net = mine.reduce((sum, t) => sum + t.amount, 0)
+            const paid = mine.reduce((sum, t) => (kindOf(t) === 'payment' ? sum - t.amount : sum), 0)
+            const closing = sec.closing ?? (sections.length === 1 ? documentClosing(lines) : undefined)
+            return { sec, rows: mine.length, check: reconcile({ ...sec, closing }, net, paid) }
+          })
+          // A heading with nothing under it, and no balances, is not a card.
+          .filter(({ sec, rows: n }) => n > 0 || sec.opening !== undefined || sec.closing !== undefined)
+          .map(({ check }) => check)
+      : []
   return {
     transactions,
     warnings,
     detectedFormat: detection.label,
     kind: detection.kind,
+    reconciliation,
     bankId: detection.bank?.id ?? null,
   }
 }

@@ -5,6 +5,8 @@ export type StatementKind = 'account' | 'card' | 'unknown'
 export interface BankProfile {
   id: string
   name: string
+  /** How it is written in a short label, e.g. "UOB ••1111". */
+  short: string
   /** Names and product names. Worth one point each when found in the letterhead area. */
   signatures: string[]
   /**
@@ -25,6 +27,7 @@ export const BANK_PROFILES: BankProfile[] = [
   {
     id: 'kbank',
     name: 'Kasikornbank (KBank)',
+    short: 'KBank',
     signatures: ['KASIKORNBANK', 'KBANK', 'ธนาคารกสิกรไทย', 'K PLUS', 'K-CREDIT'],
     identifiers: ['KASIKORNBANK.COM', 'K-CONTACT CENTER', 'ราษฎร์บูรณะ 27/1', /RAT\s*BURANA/i],
     defaultKind: 'unknown',
@@ -32,6 +35,7 @@ export const BANK_PROFILES: BankProfile[] = [
   {
     id: 'scb',
     name: 'Siam Commercial Bank (SCB)',
+    short: 'SCB',
     signatures: ['SIAM COMMERCIAL', 'SCB EASY', 'ธนาคารไทยพาณิชย์', 'SCB '],
     identifiers: ['SCB.CO.TH', 'SCB CONTACT CENTER'],
     defaultKind: 'unknown',
@@ -39,6 +43,7 @@ export const BANK_PROFILES: BankProfile[] = [
   {
     id: 'ktb',
     name: 'Krungthai Bank (KTB)',
+    short: 'KTB',
     signatures: ['KRUNGTHAI BANK', 'KRUNG THAI BANK', 'ธนาคารกรุงไทย', 'KRUNGTHAI NEXT'],
     identifiers: ['KRUNGTHAI.COM', 'KTB NETBANK'],
     defaultKind: 'unknown',
@@ -46,6 +51,7 @@ export const BANK_PROFILES: BankProfile[] = [
   {
     id: 'bbl',
     name: 'Bangkok Bank (BBL)',
+    short: 'BBL',
     signatures: ['BANGKOK BANK', 'ธนาคารกรุงเทพ', 'BUALUANG'],
     identifiers: ['BANGKOKBANK.COM'],
     defaultKind: 'unknown',
@@ -53,6 +59,7 @@ export const BANK_PROFILES: BankProfile[] = [
   {
     id: 'ttb',
     name: 'TMBThanachart (ttb)',
+    short: 'ttb',
     signatures: ['TMBTHANACHART', 'TTB ', 'ทีทีบี', 'ธนาคารทหารไทยธนชาต'],
     // ttb statements never name the bank; the head-office address and phone do.
     identifiers: ['TTBBANK.COM', '0 2299 1111', /3000\s+PHAHOLYOTHIN/i, /3000\s*ถ\.?\s*พหลโยธิน/],
@@ -61,6 +68,7 @@ export const BANK_PROFILES: BankProfile[] = [
   {
     id: 'krungsri',
     name: 'Krungsri (Bank of Ayudhya)',
+    short: 'Krungsri',
     signatures: ['KRUNGSRI', 'AYUDHYA', 'ธนาคารกรุงศรีอยุธยา', 'KMA'],
     identifiers: ['KRUNGSRI.COM'],
     defaultKind: 'unknown',
@@ -68,6 +76,7 @@ export const BANK_PROFILES: BankProfile[] = [
   {
     id: 'gsb',
     name: 'Government Savings Bank (GSB)',
+    short: 'GSB',
     signatures: ['GOVERNMENT SAVINGS BANK', 'ธนาคารออมสิน', 'MYMO'],
     identifiers: ['GSB.OR.TH'],
     defaultKind: 'account',
@@ -75,6 +84,7 @@ export const BANK_PROFILES: BankProfile[] = [
   {
     id: 'ktc',
     name: 'KTC (Krungthai Card)',
+    short: 'KTC',
     signatures: ['KTC VISA', 'KTC FOREVER', 'KTC TOUCH', 'KTC MOBILE', 'KTC PHONE'],
     identifiers: ['KRUNGTHAI CARD', 'บัตรกรุงไทย', 'KTC.CO.TH'],
     defaultKind: 'card',
@@ -82,6 +92,7 @@ export const BANK_PROFILES: BankProfile[] = [
   {
     id: 'uob',
     name: 'UOB Thailand',
+    short: 'UOB',
     signatures: ['UNITED OVERSEAS BANK', 'UOB '],
     identifiers: ['UOB.CO.TH', 'UOB CONTACT CENTER'],
     defaultKind: 'unknown',
@@ -89,6 +100,7 @@ export const BANK_PROFILES: BankProfile[] = [
   {
     id: 'citi',
     name: 'Citibank Thailand',
+    short: 'Citi',
     signatures: ['CITIBANK', 'CITI '],
     defaultKind: 'card',
   },

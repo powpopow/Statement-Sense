@@ -241,6 +241,7 @@ function Row({
         )}
         <div className="small muted">
           {transaction.sourceFile}
+          {transaction.accountName && ` · ${transaction.accountName}`}
           {transaction.foreignCurrency && ` · ${transaction.foreignCurrency}`}
           {transaction.matchedOrderId && ' · matched to an order'}
         </div>

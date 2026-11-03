@@ -86,6 +86,19 @@ export interface Order {
   owner?: string
 }
 
+/**
+ * The cash a person moved to their cash account for one month, stated once at
+ * month end. It stands for personal spending with no detail below it, so it
+ * counts as spending in that month and nothing more is tracked.
+ */
+export interface CashEntry {
+  /** The month it covers, as YYYY-MM. One entry per month. */
+  month: string
+  /** Baht moved to cash that month. */
+  amount: number
+  note?: string
+}
+
 /** A user-editable rule mapping a description pattern to a category. */
 export interface Rule {
   id: string

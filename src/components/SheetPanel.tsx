@@ -50,6 +50,8 @@ export function SheetPanel({ store }: { store: AppStore }) {
         transactions: backup.transactions,
         orders: backup.orders,
         rules: backup.rules,
+        // An older backup has no cash; keep what is here rather than wipe it.
+        ...(backup.cash?.length ? { cash: backup.cash } : {}),
       })
       setRestored(
         `Restored ${backup.transactions.length} transactions and ${backup.orders.length} orders.`,
@@ -136,7 +138,7 @@ export function SheetPanel({ store }: { store: AppStore }) {
           <button
             className="primary"
             disabled={!hasData && !store.rules.length}
-            onClick={() => exportJson(store.transactions, store.orders, store.rules)}
+            onClick={() => exportJson(store.transactions, store.orders, store.rules, store.cash)}
           >
             Download backup (JSON)
           </button>

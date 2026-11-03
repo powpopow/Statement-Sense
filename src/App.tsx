@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Upload } from './components/Upload'
 import { Summary } from './components/Summary'
+import { setCashEntry } from './lib/cash'
 import { Transactions } from './components/Transactions'
 import { Matches } from './components/Matches'
 import { Rules } from './components/Rules'
@@ -87,7 +88,11 @@ export default function App() {
 
       <main>
         {tab === 'import' && <Upload store={store} onDone={() => setTab('summary')} />}
-        {tab === 'summary' && <Summary transactions={store.transactions} />}
+        {tab === 'summary' && <Summary
+            transactions={store.transactions}
+            cash={store.cash}
+            onCash={(month, amount) => store.commit({ cash: setCashEntry(store.cash, month, amount) })}
+          />}
         {tab === 'transactions' && <Transactions store={store} />}
         {tab === 'matches' && <Matches store={store} />}
         {tab === 'rules' && <Rules store={store} />}

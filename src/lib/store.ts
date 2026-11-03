@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { defaultRules } from './categorize'
 import * as sheets from './sheets'
 import { isConfigured, isSignedIn, signIn, signOut } from './google'
-import type { Order, Rule, Transaction } from './types'
+import type { CashEntry, Order, Rule, Transaction } from './types'
 
 const CACHE_KEY = 'statement-sense.cache'
 
@@ -25,16 +25,19 @@ interface Cache {
   transactions: Transaction[]
   orders: Order[]
   rules: Rule[]
+  /** Cash stated per month; see cash.ts. */
+  cash: CashEntry[]
 }
 
 function readCache(): Cache {
   try {
     const raw = localStorage.getItem(CACHE_KEY)
-    if (raw) return JSON.parse(raw) as Cache
+    // A cache saved before cash existed has no `cash`, so fill it in.
+    if (raw) return { cash: [], ...(JSON.parse(raw) as Partial<Cache>) } as Cache
   } catch {
     // A corrupt cache should not stop the app from starting.
   }
-  return { transactions: [], orders: [], rules: defaultRules() }
+  return { transactions: [], orders: [], rules: defaultRules(), cash: [] }
 }
 
 function writeCache(cache: Cache) {
@@ -51,11 +54,12 @@ export function useAppStore() {
   const [transactions, setTransactions] = useState<Transaction[]>(initial.transactions)
   const [orders, setOrders] = useState<Order[]>(initial.orders)
   const [rules, setRules] = useState<Rule[]>(initial.rules)
+  const [cash, setCash] = useState<CashEntry[]>(initial.cash)
   const [sync, setSync] = useState<SyncState>({ status: 'disconnected' })
 
   useEffect(() => {
-    writeCache({ transactions, orders, rules })
-  }, [transactions, orders, rules])
+    writeCache({ transactions, orders, rules, cash })
+  }, [transactions, orders, rules, cash])
 
   const spreadsheetId = 'spreadsheetId' in sync ? sync.spreadsheetId : null
 
@@ -69,12 +73,13 @@ export function useAppStore() {
         await sheets.writeTransactions(id, next?.transactions ?? transactions)
         await sheets.writeOrders(id, next?.orders ?? orders)
         await sheets.writeRules(id, next?.rules ?? rules)
+        await sheets.writeCash(id, next?.cash ?? cash)
         setSync({ status: 'ready', spreadsheetId: id, lastSync: Date.now() })
       } catch (error) {
         setSync({ status: 'error', message: (error as Error).message })
       }
     },
-    [transactions, orders, rules],
+    [transactions, orders, rules, cash],
   )
 
   /** Pull the sheet's contents over local state. */
@@ -83,13 +88,18 @@ export function useAppStore() {
     if (!id) return
     setSync({ status: 'syncing', spreadsheetId: id })
     try {
-      const [t, o, r] = await Promise.all([
+      const [t, o, r, c] = await Promise.all([
         sheets.readTransactions(id),
         sheets.readOrders(id),
         sheets.readRules(id),
+        sheets.readCash(id),
       ])
       setTransactions(t)
       setOrders(o)
+      // Cash is typed in by hand and exists nowhere else. If the sheet has none
+      // (an older sheet with no Cash tab), keep what is here and let the next
+      // push create the tab, rather than wiping it.
+      setCash((local) => (c.length ? c : local))
       // An empty Rules tab means a fresh sheet, so seed it with the defaults.
       setRules(r.length ? r : defaultRules())
       setSync({ status: 'ready', spreadsheetId: id, lastSync: Date.now() })
@@ -121,6 +131,7 @@ export function useAppStore() {
         await sheets.writeRules(id, rules)
         await sheets.writeTransactions(id, transactions)
         await sheets.writeOrders(id, orders)
+        await sheets.writeCash(id, cash)
         setSync({ status: 'ready', spreadsheetId: id, lastSync: Date.now() })
       } else {
         setSync({ status: 'ready', spreadsheetId: id, lastSync: null })
@@ -129,7 +140,7 @@ export function useAppStore() {
     } catch (error) {
       setSync({ status: 'error', message: (error as Error).message })
     }
-  }, [rules, transactions, orders, pull])
+  }, [rules, transactions, orders, cash, pull])
 
   const disconnect = useCallback(() => {
     signOut()
@@ -160,6 +171,7 @@ export function useAppStore() {
       if (next.transactions) setTransactions(next.transactions)
       if (next.orders) setOrders(next.orders)
       if (next.rules) setRules(next.rules)
+      if (next.cash) setCash(next.cash)
       void push(next)
     },
     [push],
@@ -169,6 +181,7 @@ export function useAppStore() {
     transactions,
     orders,
     rules,
+    cash,
     sync,
     spreadsheetId,
     commit,

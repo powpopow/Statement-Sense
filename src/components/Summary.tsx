@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { formatMoney } from '../lib/money'
 import { ME, ownerOf, peopleFrom } from '../lib/people'
-import { merchantLabel, netBy, totalsOf } from '../lib/summary'
-import type { Transaction } from '../lib/types'
+import { cashByMonth, cashFor, currentMonth } from '../lib/cash'
+import { merchantLabel, netBy, totalsOf, withCashByMonth, withCashGroup } from '../lib/summary'
+import type { CashEntry, Transaction } from '../lib/types'
 import { BarChart, ColumnChart, type Datum } from './charts'
 
 /** Fixed slot per category, so a category keeps its colour as filters change. */
@@ -22,7 +23,14 @@ function monthLabel(month: string): string {
 
 const EVERYONE = '__everyone__'
 
-export function Summary({ transactions: all }: { transactions: Transaction[] }) {
+interface SummaryProps {
+  transactions: Transaction[]
+  cash: CashEntry[]
+  /** Save (or, with null, clear) the cash stated for a month. */
+  onCash: (month: string, amount: number | null) => void
+}
+
+export function Summary({ transactions: all, cash, onCash }: SummaryProps) {
   // Whose spending to show. Yours by default, so a charge you paid for your
   // mum doesn't inflate your own totals. Everything below works on this list.
   const [whose, setWhose] = useState<string>(ME)
@@ -46,12 +54,18 @@ export function Summary({ transactions: all }: { transactions: Transaction[] }) 
   // Spending is purchases less refunds; rewards sit beside it and card payments
   // are neither (see lib/summary.ts).
   const totals = useMemo(() => totalsOf(scoped), [scoped])
-  const totalSpend = totals.net
+  // Cash is the user's own allowance, so it counts for Me and Everyone only.
+  const includeCash = whose === ME || whose === EVERYONE
+  const cashSpend = includeCash ? cashFor(cash, month) : 0
+  const cashMonths = includeCash ? (month === 'all' ? cash.length : cashSpend > 0 ? 1 : 0) : 0
+  const cardSpend = totals.net
+  const totalSpend = cardSpend + cashSpend
+  const cashMap = useMemo(() => (includeCash ? cashByMonth(cash) : new Map<string, number>()), [cash, includeCash])
   const flagged = scoped.filter((t) => t.confidence < 0.7).length
   const uncategorized = scoped.filter((t) => t.amount > 0 && t.category === 'Uncategorized')
 
   const byCategory = useMemo<Datum[]>(() => {
-    const sorted = netBy(scoped, (t) => t.category).map((g) => [g.key, g] as const)
+    const sorted = withCashGroup(netBy(scoped, (t) => t.category), cashSpend, cashMonths).map((g) => [g.key, g] as const)
     // Past eight slots the palette stops being distinguishable, so fold the
     // tail into one bar rather than inventing colours.
     const head = sorted.slice(0, SERIES_SLOTS)
@@ -74,10 +88,10 @@ export function Summary({ transactions: all }: { transactions: Transaction[] }) 
       })
     }
     return data
-  }, [scoped, totalSpend])
+  }, [scoped, totalSpend, cashSpend, cashMonths])
 
   const byMonth = useMemo<Datum[]>(() => {
-    return netBy(transactions, (t) => t.date.slice(0, 7))
+    return withCashByMonth(netBy(transactions, (t) => t.date.slice(0, 7)), cashMap)
       .sort((a, b) => a.key.localeCompare(b.key))
       .slice(-12)
       .map(({ key, value }) => ({
@@ -86,7 +100,7 @@ export function Summary({ transactions: all }: { transactions: Transaction[] }) 
         color: 'var(--series-1)',
         detail: key === month ? 'Currently selected' : undefined,
       }))
-  }, [transactions, month])
+  }, [transactions, month, cashMap])
 
   const topMerchants = useMemo(() => {
     // Net of refunds, so points redeemed against a merchant offset that merchant.
@@ -156,6 +170,7 @@ export function Summary({ transactions: all }: { transactions: Transaction[] }) 
           <div className="sub">
             {totals.purchaseCount} purchase{totals.purchaseCount === 1 ? '' : 's'}
             {totals.refunded > 0 && ` · after ${formatMoney(totals.refunded)} refunded`}
+            {cashSpend > 0 && ` · cards ${formatMoney(cardSpend)} + cash ${formatMoney(cashSpend)}`}
             {dayCount && ` · ${formatMoney(totalSpend / dayCount)} a day`}
           </div>
         </div>
@@ -188,6 +203,8 @@ export function Summary({ transactions: all }: { transactions: Transaction[] }) 
           </div>
         </div>
       </div>
+
+      {includeCash && <CashPanel months={[...new Set([currentMonth(), ...all.map((t) => t.date.slice(0, 7))])].sort().reverse().slice(0, 6)} cash={cash} onCash={onCash} />}
 
       <div className="card">
         <div className="card-head">
@@ -229,5 +246,39 @@ export function Summary({ transactions: all }: { transactions: Transaction[] }) 
         </div>
       </div>
     </>
+  )
+}
+
+/** One box per month for the cash moved to your cash account, entered at month end. */
+function CashPanel({ months, cash, onCash }: { months: string[]; cash: CashEntry[]; onCash: SummaryProps['onCash'] }) {
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card-head">
+        <h2>Cash for the month</h2>
+        <span className="small muted">Enter it at month end; counted as personal spending</span>
+      </div>
+      <div className="row" style={{ flexWrap: 'wrap', gap: 12 }}>
+        {months.map((m) => (
+          <label key={m} className="small secondary">
+            {monthLabel(m)}{' '}
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="any"
+              placeholder="0"
+              style={{ width: 96 }}
+              // Keyed by value so a restore or pull refreshes the box.
+              key={`${m}-${cashFor(cash, m)}`}
+              defaultValue={cashFor(cash, m) || ''}
+              onBlur={(e) => {
+                const v = e.target.value === '' ? null : Number(e.target.value)
+                if ((v ?? 0) !== cashFor(cash, m)) onCash(m, v)
+              }}
+            />
+          </label>
+        ))}
+      </div>
+    </div>
   )
 }

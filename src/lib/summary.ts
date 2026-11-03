@@ -71,3 +71,22 @@ export function netBy(rows: Transaction[], key: (t: Transaction) => string): Net
 export function merchantLabel(description: string): string {
   return merchantKey(description.replace(/^\s*PWP:\s*/i, ''))
 }
+
+/**
+ * The groups with the stated cash added in. Cash is one group of its own, so it
+ * appears beside the categories, and a month's total includes that month's cash.
+ */
+export function withCashGroup(groups: NetGroup[], cash: number, months: number): NetGroup[] {
+  if (cash <= 0) return groups
+  return [...groups, { key: 'Cash', value: cash, count: months }].sort((a, b) => b.value - a.value)
+}
+
+export function withCashByMonth(groups: NetGroup[], cash: Map<string, number>): NetGroup[] {
+  const merged = new Map(groups.map((g) => [g.key, { ...g }]))
+  for (const [month, amount] of cash) {
+    const group = merged.get(month) ?? { key: month, value: 0, count: 0 }
+    group.value += amount
+    merged.set(month, group)
+  }
+  return [...merged.values()]
+}

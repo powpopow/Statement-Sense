@@ -6,7 +6,7 @@
  * supported way to retrain categorisation.
  */
 import { googleFetch } from './google'
-import type { Category, Order, Rule, Transaction } from './types'
+import type { CashEntry, Category, Order, Rule, Transaction } from './types'
 
 const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets'
 const DRIVE_API = 'https://www.googleapis.com/drive/v3/files'
@@ -26,10 +26,14 @@ const ORDER_HEADERS = [
 
 const RULE_HEADERS = ['id', 'pattern', 'matchType', 'category', 'priority', 'enabled'] as const
 
+/** One row per month: the cash the user states at month end. */
+const CASH_HEADERS = ['month', 'amount', 'note'] as const
+
 export const TABS = {
   transactions: 'Transactions',
   orders: 'Orders',
   rules: 'Rules',
+  cash: 'Cash',
 } as const
 
 export function getSavedSpreadsheetId(): string | null {
@@ -120,6 +124,7 @@ export async function createSpreadsheet(): Promise<string> {
         { properties: { title: TABS.transactions, gridProperties: { frozenRowCount: 1 } } },
         { properties: { title: TABS.orders, gridProperties: { frozenRowCount: 1 } } },
         { properties: { title: TABS.rules, gridProperties: { frozenRowCount: 1 } } },
+        { properties: { title: TABS.cash, gridProperties: { frozenRowCount: 1 } } },
       ],
     }),
   })
@@ -134,6 +139,7 @@ export async function createSpreadsheet(): Promise<string> {
         { range: `${TABS.transactions}!A1`, values: [TX_HEADERS as unknown as string[]] },
         { range: `${TABS.orders}!A1`, values: [ORDER_HEADERS as unknown as string[]] },
         { range: `${TABS.rules}!A1`, values: [RULE_HEADERS as unknown as string[]] },
+        { range: `${TABS.cash}!A1`, values: [CASH_HEADERS as unknown as string[]] },
       ],
     }),
   })
@@ -188,6 +194,45 @@ export async function writeOrders(spreadsheetId: string, orders: Order[]) {
 export async function writeRules(spreadsheetId: string, rules: Rule[]) {
   await clearTab(spreadsheetId, TABS.rules)
   await appendRows(spreadsheetId, TABS.rules, rules.map((r) => toRow(r, RULE_HEADERS)))
+}
+
+/**
+ * Make sure a tab exists. Sheets made before the Cash tab was added do not
+ * have it, and writing to a tab that is not there fails.
+ */
+async function ensureTab(spreadsheetId: string, title: string, headers: readonly string[]) {
+  const response = await googleFetch(`${SHEETS_API}/${spreadsheetId}?fields=sheets.properties.title`)
+  const data = (await response.json()) as { sheets?: { properties: { title: string } }[] }
+  if (data.sheets?.some((s) => s.properties.title === title)) return
+  await googleFetch(`${SHEETS_API}/${spreadsheetId}:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({ requests: [{ addSheet: { properties: { title, gridProperties: { frozenRowCount: 1 } } } }] }),
+  })
+  await writeHeaders(spreadsheetId, title, headers)
+}
+
+export async function writeCash(spreadsheetId: string, cash: CashEntry[]) {
+  await ensureTab(spreadsheetId, TABS.cash, CASH_HEADERS)
+  await writeHeaders(spreadsheetId, TABS.cash, CASH_HEADERS)
+  await clearTab(spreadsheetId, TABS.cash)
+  await appendRows(spreadsheetId, TABS.cash, cash.map((c) => toRow(c, CASH_HEADERS)))
+}
+
+/** An older sheet has no Cash tab yet: that means no cash stated, not a failure. */
+export async function readCash(spreadsheetId: string): Promise<CashEntry[]> {
+  let values: string[][]
+  try {
+    values = await readTab(spreadsheetId, TABS.cash)
+  } catch (error) {
+    if (/Unable to parse range|Requested entity was not found/i.test((error as Error).message)) return []
+    throw error
+  }
+  return fromRows<CashEntry>(values, (get) => {
+    const month = get('month')
+    const amount = num(get('amount'))
+    if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month) || amount <= 0) return null
+    return { month, amount, ...(get('note') ? { note: get('note') } : {}) }
+  })
 }
 
 export async function readTransactions(spreadsheetId: string): Promise<Transaction[]> {

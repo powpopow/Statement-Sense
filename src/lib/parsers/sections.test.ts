@@ -95,7 +95,7 @@ describe('other layouts', () => {
     expect(result.transactions[0].accountName).toBe('KTC ••4321')
   })
 
-  it('cannot check a statement that prints no previous balance, but notes when the implied one was paid', () => {
+  it('accepts a statement with no printed previous balance only on the paid-in-full assumption', () => {
     const lines = [
       '3000 Phaholyothin RD., Chompon, Chatuchak Bangkok Phone: 0 2299 1111',
       'Card Statement  Card number 411111XXXXXX9876 Credit limit 500,000.00',
@@ -105,7 +105,7 @@ describe('other layouts', () => {
       '30 Sep 26 30 Sep 26 Payment via touch BANGKOK TH -200.00 THB',
     ]
     const [check] = parse(lines).reconciliation
-    expect(check).toMatchObject({ last4: '9876', status: 'unverified', closing: 300 })
+    expect(check).toMatchObject({ last4: '9876', status: 'assumed', closing: 300 })
     expect(check.detail).toContain('exactly what was paid')
   })
 

@@ -286,7 +286,7 @@ export function Upload({ store, onDone }: Props) {
               {outcome.reconciliation.map((check, i) => (
                 <div key={`check-${i}`} className={check.status === 'mismatch' ? 'banner error' : 'banner'}>
                   <strong>
-                    {check.status === 'verified' ? '✓ Adds up' : check.status === 'mismatch' ? '⚠ Does not add up' : 'Not checked'}
+                    {check.status === 'verified' ? '✓ Adds up' : check.status === 'assumed' ? '✓ Adds up if paid in full' : check.status === 'mismatch' ? '⚠ Does not add up' : 'Not checked'}
                   </strong>
                   {check.last4 && ` · card ••${check.last4}`} — {check.detail}
                 </div>

@@ -153,7 +153,7 @@ export function splitSections(lines: string[], isRow: (line: string) => boolean)
 export interface Reconciliation {
   /** Last four digits of the card this covers, when known. */
   last4?: string
-  status: 'verified' | 'mismatch' | 'unverified'
+  status: 'verified' | 'assumed' | 'mismatch' | 'unverified'
   opening?: number
   closing?: number
   /** This period's rows: spending positive, credits negative. */
@@ -172,7 +172,8 @@ const baht = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2
  * `paid` is how much of the period's credits were payments of the card's own
  * bill. It matters only when no opening balance is printed (ttb prints just
  * the amount due): then the previous balance can be inferred, and if it equals
- * what was paid, that is a good sign — though not proof, so it stays unverified.
+ * what was paid, the rows add up *if* the last bill was paid in full. That is
+ * an assumption, not a printed figure, so it is 'assumed', not 'verified'.
  */
 export function reconcile(
   section: Pick<Section, 'last4' | 'opening' | 'closing'>,
@@ -189,10 +190,14 @@ export function reconcile(
 
   if (opening === undefined) {
     const implied = round2(closing - net)
-    const clue =
-      paid > 0 && Math.abs(implied - paid) < 0.01
-        ? ` The previous balance implied by the rows is ${baht(implied)}, exactly what was paid, which is what you would expect if it was paid in full.`
-        : ''
+    if (paid > 0 && Math.abs(implied - paid) < 0.01) {
+      return {
+        ...base,
+        status: 'assumed',
+        detail: `No previous balance is printed. The rows imply one of ${baht(implied)}, exactly what was paid this period, so they add up if the last bill was paid in full.`,
+      }
+    }
+    const clue = ''
     return {
       ...base,
       status: 'unverified',

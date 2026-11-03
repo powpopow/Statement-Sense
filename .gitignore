@@ -49,3 +49,6 @@ public/tesseract/
 
 # Local Claude Code settings (personal permissions)
 .claude/settings.local.json
+
+# clasp links this folder to one Apps Script project
+apps-script/.clasp.json

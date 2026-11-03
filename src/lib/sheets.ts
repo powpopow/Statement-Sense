@@ -185,6 +185,9 @@ const num = (s: string, fallback = 0) => {
   const n = Number(String(s).replace(/[^\d.-]/g, ''))
   return Number.isFinite(n) ? n : fallback
 }
+/** Reads one named cell of a sheet row. */
+export type Getter = (key: string) => string
+
 const bool = (s: string) => /^(true|yes|1)$/i.test(s.trim())
 
 /** When a row last changed, and whether it was deleted; blank on rows written before stamping. */
@@ -241,15 +244,17 @@ export async function readCash(spreadsheetId: string): Promise<CashEntry[]> {
     if (/Unable to parse range|Requested entity was not found/i.test((error as Error).message)) return []
     throw error
   }
-  return fromRows<CashEntry>(values, (get) => {
-    const month = get('month')
-    const amount = num(get('amount'))
-    if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month)) return null
-    const stamp = stampOf(get)
-    // A removed month is kept as a marker; otherwise an amount is needed.
-    if (amount <= 0 && !stamp.deleted) return null
-    return { month, amount, ...(get('note') ? { note: get('note') } : {}), ...stamp }
-  })
+  return fromRows<CashEntry>(values, buildCash)
+}
+
+export const buildCash = (get: Getter): CashEntry | null => {
+  const month = get('month')
+  const amount = num(get('amount'))
+  if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month)) return null
+  const stamp = stampOf(get)
+  // A removed month is kept as a marker; otherwise an amount is needed.
+  if (amount <= 0 && !stamp.deleted) return null
+  return { month, amount, ...(get('note') ? { note: get('note') } : {}), ...stamp }
 }
 
 export async function writeStatements(spreadsheetId: string, statements: StatementRecord[]) {
@@ -267,88 +272,96 @@ export async function readStatements(spreadsheetId: string): Promise<StatementRe
     if (/Unable to parse range|Requested entity was not found/i.test((error as Error).message)) return []
     throw error
   }
-  return fromRows<StatementRecord>(values, (get) => {
-    if (!get('id') || !get('last4') || !get('periodEnd') || get('closing') === '') return null
-    return {
-      id: get('id'),
-      bank: get('bank'),
-      last4: get('last4'),
-      periodEnd: get('periodEnd'),
-      ...(get('opening') !== '' ? { opening: num(get('opening')) } : {}),
-      closing: num(get('closing')),
-      net: num(get('net')),
-      sourceFile: get('sourceFile'),
-    }
-  })
+  return fromRows<StatementRecord>(values, buildStatement)
+}
+
+export const buildStatement = (get: Getter): StatementRecord | null => {
+  if (!get('id') || !get('last4') || !get('periodEnd') || get('closing') === '') return null
+  return {
+    id: get('id'),
+    bank: get('bank'),
+    last4: get('last4'),
+    periodEnd: get('periodEnd'),
+    ...(get('opening') !== '' ? { opening: num(get('opening')) } : {}),
+    closing: num(get('closing')),
+    net: num(get('net')),
+    sourceFile: get('sourceFile'),
+  }
 }
 
 export async function readTransactions(spreadsheetId: string): Promise<Transaction[]> {
   const values = await readTab(spreadsheetId, TABS.transactions)
-  return fromRows<Transaction>(values, (get) => {
-    const id = get('id')
-    const date = get('date')
-    if (!id || !date) return null
-    return {
-      id,
-      date,
-      postedDate: get('postedDate') || undefined,
-      description: get('description'),
-      amount: num(get('amount')),
-      currency: get('currency') || 'THB',
-      foreignAmount: get('foreignAmount') ? num(get('foreignAmount')) : undefined,
-      foreignCurrency: get('foreignCurrency') || undefined,
-      category: (get('category') || 'Uncategorized') as Category,
-      categoryLocked: bool(get('categoryLocked')),
-      source: get('source'),
-      sourceFile: get('sourceFile'),
-      confidence: num(get('confidence'), 0.5),
-      notes: get('notes') || undefined,
-      matchedOrderId: get('matchedOrderId') || undefined,
-      owner: get('owner') || undefined,
-      account: get('account') || undefined,
-      accountName: get('accountName') || undefined,
-      ...stampOf(get),
-    }
-  })
+  return fromRows<Transaction>(values, buildTransaction)
+}
+
+export const buildTransaction = (get: Getter): Transaction | null => {
+  const id = get('id')
+  const date = get('date')
+  if (!id || !date) return null
+  return {
+    id,
+    date,
+    postedDate: get('postedDate') || undefined,
+    description: get('description'),
+    amount: num(get('amount')),
+    currency: get('currency') || 'THB',
+    foreignAmount: get('foreignAmount') ? num(get('foreignAmount')) : undefined,
+    foreignCurrency: get('foreignCurrency') || undefined,
+    category: (get('category') || 'Uncategorized') as Category,
+    categoryLocked: bool(get('categoryLocked')),
+    source: get('source'),
+    sourceFile: get('sourceFile'),
+    confidence: num(get('confidence'), 0.5),
+    notes: get('notes') || undefined,
+    matchedOrderId: get('matchedOrderId') || undefined,
+    owner: get('owner') || undefined,
+    account: get('account') || undefined,
+    accountName: get('accountName') || undefined,
+    ...stampOf(get),
+  }
 }
 
 export async function readOrders(spreadsheetId: string): Promise<Order[]> {
   const values = await readTab(spreadsheetId, TABS.orders)
-  return fromRows<Order>(values, (get) => {
-    const id = get('id')
-    if (!id) return null
-    return {
-      id,
-      platform: (get('platform') || 'Other') as Order['platform'],
-      date: get('date'),
-      orderRef: get('orderRef') || undefined,
-      description: get('description'),
-      amount: num(get('amount')),
-      currency: get('currency') || 'THB',
-      items: get('items') || undefined,
-      sourceFile: get('sourceFile'),
-      confidence: num(get('confidence'), 0.5),
-      matchedTransactionId: get('matchedTransactionId') || undefined,
-      owner: get('owner') || undefined,
-      ...stampOf(get),
-    }
-  })
+  return fromRows<Order>(values, buildOrder)
+}
+
+export const buildOrder = (get: Getter): Order | null => {
+  const id = get('id')
+  if (!id) return null
+  return {
+    id,
+    platform: (get('platform') || 'Other') as Order['platform'],
+    date: get('date'),
+    orderRef: get('orderRef') || undefined,
+    description: get('description'),
+    amount: num(get('amount')),
+    currency: get('currency') || 'THB',
+    items: get('items') || undefined,
+    sourceFile: get('sourceFile'),
+    confidence: num(get('confidence'), 0.5),
+    matchedTransactionId: get('matchedTransactionId') || undefined,
+    owner: get('owner') || undefined,
+    ...stampOf(get),
+  }
 }
 
 export async function readRules(spreadsheetId: string): Promise<Rule[]> {
   const values = await readTab(spreadsheetId, TABS.rules)
-  return fromRows<Rule>(values, (get) => {
-    const pattern = get('pattern')
-    if (!pattern) return null
-    return {
-      id: get('id') || `rule-${pattern}`,
-      pattern,
-      matchType: get('matchType') === 'regex' ? 'regex' : 'contains',
-      category: (get('category') || 'Uncategorized') as Category,
-      priority: num(get('priority'), pattern.length),
-      // Blank means enabled, so a hand-added row in the sheet just works.
-      enabled: get('enabled') === '' ? true : bool(get('enabled')),
-      ...stampOf(get),
-    }
-  })
+  return fromRows<Rule>(values, buildRule)
+}
+
+export const buildRule = (get: Getter): Rule | null => {
+  const pattern = get('pattern')
+  if (!pattern) return null
+  return {
+    id: get('id') || `rule-${pattern}`,
+    pattern,
+    matchType: get('matchType') === 'regex' ? 'regex' : 'contains',
+    category: (get('category') || 'Uncategorized') as Category,
+    priority: num(get('priority'), pattern.length),
+    // Blank means enabled, so a hand-added row in the sheet just works.
+    enabled: get('enabled') === '' ? true : bool(get('enabled')),
+    ...stampOf(get),
+  }
 }

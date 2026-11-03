@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { spreadsheetUrl, SPREADSHEET_NAME } from '../lib/sheets'
 import { exportJson, exportOrdersCsv, exportTransactionsCsv, readBackup } from '../lib/backup'
 import type { AppStore } from '../lib/store'
+import { isBackend } from '../lib/backend'
 
 export function SheetPanel({ store }: { store: AppStore }) {
   const { sync } = store
@@ -78,7 +79,7 @@ export function SheetPanel({ store }: { store: AppStore }) {
           <span className="pill">{status}</span>
         </div>
 
-        {!store.googleConfigured && (
+        {!isBackend() && !store.googleConfigured && (
           <div className="banner warn">
             No Google client ID is configured yet, so syncing is off. Add <code>VITE_GOOGLE_CLIENT_ID</code> to a{' '}
             <code>.env</code> file (see the README for the five-minute setup) and restart the dev server. The app works
@@ -89,7 +90,11 @@ export function SheetPanel({ store }: { store: AppStore }) {
         {sync.status === 'error' && <div className="banner error">{sync.message}</div>}
 
         <div className="row" style={{ marginTop: 14 }}>
-          {store.spreadsheetId ? (
+          {isBackend() ? (
+            <button onClick={() => void store.syncNow()} disabled={sync.status === 'syncing'}>
+              Sync now
+            </button>
+          ) : store.spreadsheetId ? (
             <>
               <a
                 className="pill"

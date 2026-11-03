@@ -1,6 +1,8 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { checkAccess, isGateEnabled } from '../lib/access'
+import { AuthError, isBackend, whoami } from '../lib/backend'
 import { isConfigured, isSignedIn, signIn, signOut } from '../lib/google'
+import { clearIdToken, getIdToken, refreshIdToken, renderSignInButton } from '../lib/idAuth'
 
 type Status =
   | { kind: 'signedOut' }
@@ -11,6 +13,8 @@ type Status =
 
 /** Shows the app only after Google sign-in and an allowlist check. Does nothing if no access sheet is configured. */
 export function AccessGate({ children }: { children: ReactNode }) {
+  // With the backend, the server decides who gets in; the list lives in the sheet, not in this code.
+  if (isBackend()) return <BackendGate>{children}</BackendGate>
   if (!isGateEnabled()) return <>{children}</>
   return <Gate>{children}</Gate>
 }
@@ -86,6 +90,64 @@ function Gate({ children }: { children: ReactNode }) {
           <p className="muted small">Your statements are still read in your browser and are never uploaded.</p>
         </>
       )}
+    </div>
+  )
+}
+
+/** Sign in with Google; the backend then says whether this email is on the sheet's allow-list. */
+function BackendGate({ children }: { children: ReactNode }) {
+  const [status, setStatus] = useState<Status>({ kind: 'checking' })
+  const button = useRef<HTMLDivElement>(null)
+
+  async function verify() {
+    setStatus({ kind: 'checking' })
+    try {
+      await whoami()
+      setStatus({ kind: 'allowed' })
+    } catch (error) {
+      if (error instanceof AuthError) {
+        clearIdToken()
+        setStatus({ kind: 'denied', email: '', reason: error.message })
+      } else {
+        setStatus({ kind: 'error', message: error instanceof Error ? error.message : String(error) })
+      }
+    }
+  }
+
+  // On load: reuse or silently renew a token; if neither works, show the button.
+  useEffect(() => {
+    let live = true
+    void (async () => {
+      const token = getIdToken() || (await refreshIdToken())
+      if (!live) return
+      if (token) await verify()
+      else setStatus({ kind: 'signedOut' })
+    })()
+    return () => {
+      live = false
+    }
+  }, [])
+
+  const showButton = status.kind === 'signedOut' || status.kind === 'denied' || status.kind === 'error'
+  useEffect(() => {
+    if (showButton && button.current) void renderSignInButton(button.current, () => void verify())
+  }, [showButton])
+
+  if (status.kind === 'allowed') return <>{children}</>
+
+  return (
+    <div className="gate">
+      <h1>Statement Sense</h1>
+      <p className="muted">Thai bank statements → categorised spending</p>
+      {status.kind === 'checking' && <p className="muted">Checking access…</p>}
+      {status.kind === 'denied' && <p className="banner">This account is not allowed to use this app. ({status.reason})</p>}
+      {status.kind === 'error' && <p className="banner">{status.message}</p>}
+      {showButton && (
+        <div className="row" style={{ justifyContent: 'center' }}>
+          <div ref={button} />
+        </div>
+      )}
+      <p className="muted small">Your statements are still read in your browser and are never uploaded.</p>
     </div>
   )
 }

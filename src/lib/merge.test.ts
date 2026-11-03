@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyChange, live, mergeRows, type Stamped } from './merge'
+import { applyChange, live, mergeRows, newerRows, type Stamped } from './merge'
 
 interface Row extends Stamped { id: string; v: string }
 const key = (r: Row) => r.id
@@ -48,5 +48,13 @@ describe('applyChange', () => {
   it('keeps an existing delete marker as it was', () => {
     const marked: Row[] = [{ id: 'a', v: '1', deleted: true, updatedAt: 7 }]
     expect(applyChange(marked, [], key, 99)[0].updatedAt).toBe(7)
+  })
+})
+
+describe('newerRows', () => {
+  it('sends rows the other side lacks or holds an older copy of, and nothing else', () => {
+    const ours: Row[] = [{ id: 'a', v: '1', updatedAt: 5 }, { id: 'b', v: '2', updatedAt: 5 }, { id: 'c', v: '3' }, { id: 'd', v: '4', updatedAt: 1 }]
+    const theirs: Row[] = [{ id: 'a', v: '1', updatedAt: 5 }, { id: 'b', v: 'x', updatedAt: 2 }, { id: 'd', v: '4', updatedAt: 9 }]
+    expect(newerRows(ours, theirs, key).map((r) => r.id)).toEqual(['b', 'c'])
   })
 })

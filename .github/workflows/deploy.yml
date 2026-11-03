@@ -32,6 +32,8 @@ jobs:
           # the authorised JavaScript origins you set in Google Cloud Console.
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
           VITE_ALLOWED_EMAILS: ${{ vars.VITE_ALLOWED_EMAILS }}
+          # The Apps Script web app URL. Not a secret: it only answers a valid Google token from an allowed email.
+          VITE_BACKEND_URL: ${{ vars.VITE_BACKEND_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

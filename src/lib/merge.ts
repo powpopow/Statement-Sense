@@ -51,3 +51,12 @@ export function applyChange<T extends Stamped>(full: T[], next: T[], key: (row: 
   }
   return out
 }
+
+/** The rows in `ours` the other side lacks, or has an older copy of: what must be sent. */
+export function newerRows<T extends Stamped>(ours: T[], theirs: T[], key: (row: T) => string): T[] {
+  const there = new Map(theirs.map((row) => [key(row), row]))
+  return ours.filter((row) => {
+    const other = there.get(key(row))
+    return !other || (row.updatedAt ?? 0) > (other.updatedAt ?? 0)
+  })
+}

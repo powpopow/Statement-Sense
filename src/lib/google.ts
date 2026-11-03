@@ -35,6 +35,15 @@ declare global {
   interface Window {
     google?: {
       accounts: {
+        id?: {
+          initialize: (config: {
+            client_id: string
+            callback: (response: { credential?: string }) => void
+            auto_select?: boolean
+          }) => void
+          prompt: (listener?: (n: { isNotDisplayed?: () => boolean; isSkippedMoment?: () => boolean }) => void) => void
+          renderButton: (parent: HTMLElement, options: Record<string, unknown>) => void
+        }
         oauth2: {
           initTokenClient: (config: {
             client_id: string
@@ -51,7 +60,7 @@ declare global {
 
 let scriptPromise: Promise<void> | null = null
 
-function loadGis(): Promise<void> {
+export function loadGis(): Promise<void> {
   if (scriptPromise) return scriptPromise
   scriptPromise = new Promise((resolve, reject) => {
     if (window.google?.accounts?.oauth2) return resolve()

@@ -100,11 +100,8 @@ export function SheetPanel({ store }: { store: AppStore }) {
               >
                 Open the sheet ↗
               </a>
-              <button onClick={() => void store.push()} disabled={sync.status === 'syncing'}>
-                Push to sheet
-              </button>
-              <button onClick={() => void store.pull()} disabled={sync.status === 'syncing'}>
-                Pull from sheet
+              <button onClick={() => void store.syncNow()} disabled={sync.status === 'syncing'}>
+                Sync now
               </button>
               <button className="ghost" onClick={store.disconnect}>
                 Disconnect

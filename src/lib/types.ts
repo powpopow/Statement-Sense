@@ -1,3 +1,4 @@
+import type { Stamped } from './merge'
 export type Category =
   | 'Food & Drink'
   | 'Groceries'
@@ -32,7 +33,7 @@ export const CATEGORIES: Category[] = [
 ]
 
 /** A single line item from a bank or credit card statement. */
-export interface Transaction {
+export interface Transaction extends Stamped {
   id: string
   /**
    * ISO date (YYYY-MM-DD) the purchase was made — the one that answers "when
@@ -69,7 +70,7 @@ export interface Transaction {
 }
 
 /** A line item from a Shopee / Grab / Lazada order export or screenshot. */
-export interface Order {
+export interface Order extends Stamped {
   id: string
   platform: 'Shopee' | 'Grab' | 'Lazada' | 'LINE MAN' | 'Foodpanda' | 'Other'
   date: string
@@ -110,7 +111,7 @@ export interface StatementRecord {
   sourceFile: string
 }
 
-export interface CashEntry {
+export interface CashEntry extends Stamped {
   /** The month it covers, as YYYY-MM. One entry per month. */
   month: string
   /** Baht moved to cash that month. */
@@ -119,7 +120,7 @@ export interface CashEntry {
 }
 
 /** A user-editable rule mapping a description pattern to a category. */
-export interface Rule {
+export interface Rule extends Stamped {
   id: string
   /** Matched case-insensitively against the description. */
   pattern: string

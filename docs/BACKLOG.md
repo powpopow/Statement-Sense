@@ -85,7 +85,7 @@ Status: ☐ open · ◐ in progress · ☑ done · ✋ waiting on a decision · 
 | SS-202 | P1 | L | Apps Script backend (clasp, in `apps-script/`): auth, allow-list, session token, schema create/migrate, `Meta` rev counter | ☐ |
 | SS-203 | P1 | L | Batch upsert/delete under a lock; idempotent by operation id; formula-injection guard | ☐ |
 | SS-204 | P1 | M | Change feed: `pull(sinceRev)` with paging; cheap `ping` for the rev | ☐ |
-| SS-205 | P1 | L | Client sync engine: outbox, push, pull, merge (newest wins, locked fields protected), no wholesale replace | ☐ |
+| SS-205 | P1 | L | Client sync engine: outbox, push, pull, merge (newest wins, locked fields protected), no wholesale replace | ◐ merge done: stamps, delete markers, merge-on-sync (whole-tab writes remain; outbox and row-level push wait for the backend) |
 | SS-206 | P1 | M | Polling schedule (visible/idle/hidden), on-focus sync, sync status in the header | ☐ |
 | SS-207 | P1 | L | **Two-device simulation test** (offline edits, conflicts, deletes, retries) | ☐ |
 | SS-208 | P2 | M | First-run migration of today's Sheet to the new schema (backup first) | ☐ |

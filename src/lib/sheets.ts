@@ -6,6 +6,7 @@
  * supported way to retrain categorisation.
  */
 import { googleFetch } from './google'
+import type { Stamped } from './merge'
 import type { CashEntry, Category, StatementRecord, Order, Rule, Transaction } from './types'
 
 const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets'
@@ -17,17 +18,19 @@ const TX_HEADERS = [
   'id', 'date', 'postedDate', 'description', 'amount', 'currency',
   'foreignAmount', 'foreignCurrency', 'category', 'categoryLocked',
   'source', 'sourceFile', 'confidence', 'notes', 'matchedOrderId', 'owner', 'account', 'accountName',
+  'updatedAt', 'deleted',
 ] as const
 
 const ORDER_HEADERS = [
   'id', 'platform', 'date', 'orderRef', 'description', 'amount', 'currency',
   'items', 'sourceFile', 'confidence', 'matchedTransactionId', 'owner',
+  'updatedAt', 'deleted',
 ] as const
 
-const RULE_HEADERS = ['id', 'pattern', 'matchType', 'category', 'priority', 'enabled'] as const
+const RULE_HEADERS = ['id', 'pattern', 'matchType', 'category', 'priority', 'enabled', 'updatedAt', 'deleted'] as const
 
 /** One row per month: the cash the user states at month end. */
-const CASH_HEADERS = ['month', 'amount', 'note'] as const
+const CASH_HEADERS = ['month', 'amount', 'note', 'updatedAt', 'deleted'] as const
 
 const STATEMENT_HEADERS = ['id', 'bank', 'last4', 'periodEnd', 'opening', 'closing', 'net', 'sourceFile'] as const
 
@@ -184,6 +187,12 @@ const num = (s: string, fallback = 0) => {
 }
 const bool = (s: string) => /^(true|yes|1)$/i.test(s.trim())
 
+/** When a row last changed, and whether it was deleted; blank on rows written before stamping. */
+const stampOf = (get: (key: string) => string): Stamped => ({
+  ...(get('updatedAt') !== '' ? { updatedAt: num(get('updatedAt')) } : {}),
+  ...(bool(get('deleted')) ? { deleted: true } : {}),
+})
+
 export async function writeTransactions(spreadsheetId: string, transactions: Transaction[]) {
   await writeHeaders(spreadsheetId, TABS.transactions, TX_HEADERS)
   await clearTab(spreadsheetId, TABS.transactions)
@@ -235,8 +244,11 @@ export async function readCash(spreadsheetId: string): Promise<CashEntry[]> {
   return fromRows<CashEntry>(values, (get) => {
     const month = get('month')
     const amount = num(get('amount'))
-    if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month) || amount <= 0) return null
-    return { month, amount, ...(get('note') ? { note: get('note') } : {}) }
+    if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month)) return null
+    const stamp = stampOf(get)
+    // A removed month is kept as a marker; otherwise an amount is needed.
+    if (amount <= 0 && !stamp.deleted) return null
+    return { month, amount, ...(get('note') ? { note: get('note') } : {}), ...stamp }
   })
 }
 
@@ -295,6 +307,7 @@ export async function readTransactions(spreadsheetId: string): Promise<Transacti
       owner: get('owner') || undefined,
       account: get('account') || undefined,
       accountName: get('accountName') || undefined,
+      ...stampOf(get),
     }
   })
 }
@@ -317,6 +330,7 @@ export async function readOrders(spreadsheetId: string): Promise<Order[]> {
       confidence: num(get('confidence'), 0.5),
       matchedTransactionId: get('matchedTransactionId') || undefined,
       owner: get('owner') || undefined,
+      ...stampOf(get),
     }
   })
 }
@@ -334,6 +348,7 @@ export async function readRules(spreadsheetId: string): Promise<Rule[]> {
       priority: num(get('priority'), pattern.length),
       // Blank means enabled, so a hand-added row in the sheet just works.
       enabled: get('enabled') === '' ? true : bool(get('enabled')),
+      ...stampOf(get),
     }
   })
 }

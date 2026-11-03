@@ -6,7 +6,8 @@
  * app work before you connect a sheet at all, and means a failed network call
  * never loses what you just imported.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { applyChange, live, mergeRows } from './merge'
 import { defaultRules } from './categorize'
 import * as sheets from './sheets'
 import { isConfigured, isSignedIn, signIn, signOut } from './google'
@@ -21,6 +22,7 @@ export type SyncState =
   | { status: 'syncing'; spreadsheetId: string }
   | { status: 'error'; message: string }
 
+/** What the rest of the app sees: live rows only. */
 interface Cache {
   transactions: Transaction[]
   orders: Order[]
@@ -31,18 +33,28 @@ interface Cache {
   statements: StatementRecord[]
 }
 
-function readCache(): Cache {
+/** What is stored and synced: the same lists plus delete markers (see merge.ts). */
+type Full = Cache
+
+const idOf = (row: { id: string }) => row.id
+const monthOf = (row: CashEntry) => row.month
+
+const mergeStatements = (a: StatementRecord[], b: StatementRecord[]) => [
+  ...new Map([...b, ...a].map((r) => [r.id, r])).values(),
+]
+
+function readCache(): Full {
   try {
     const raw = localStorage.getItem(CACHE_KEY)
-    // A cache saved before cash existed has no `cash`, so fill it in.
-    if (raw) return { cash: [], statements: [], ...(JSON.parse(raw) as Partial<Cache>) } as Cache
+    // A cache saved before cash or statements existed lacks them, so fill them in.
+    if (raw) return { cash: [], statements: [], ...(JSON.parse(raw) as Partial<Full>) } as Full
   } catch {
     // A corrupt cache should not stop the app from starting.
   }
   return { transactions: [], orders: [], rules: defaultRules(), cash: [], statements: [] }
 }
 
-function writeCache(cache: Cache) {
+function writeCache(cache: Full) {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache))
   } catch {
@@ -53,64 +65,67 @@ function writeCache(cache: Cache) {
 export function useAppStore() {
   // Read the cache once, lazily, so a reload restores state without flicker.
   const [initial] = useState(readCache)
-  const [transactions, setTransactions] = useState<Transaction[]>(initial.transactions)
-  const [orders, setOrders] = useState<Order[]>(initial.orders)
-  const [rules, setRules] = useState<Rule[]>(initial.rules)
-  const [cash, setCash] = useState<CashEntry[]>(initial.cash)
-  const [statements, setStatements] = useState<StatementRecord[]>(initial.statements)
+  const [all, setAll] = useState<Full>(initial)
   const [sync, setSync] = useState<SyncState>({ status: 'disconnected' })
 
   useEffect(() => {
-    writeCache({ transactions, orders, rules, cash, statements })
-  }, [transactions, orders, rules, cash, statements])
+    writeCache(all)
+  }, [all])
+
+  // Always the newest state, for callbacks that must not close over a stale copy.
+  const latest = useRef(all)
+  useEffect(() => {
+    latest.current = all
+  }, [all])
+
+  const transactions = useMemo(() => live(all.transactions), [all.transactions])
+  const orders = useMemo(() => live(all.orders), [all.orders])
+  const rules = useMemo(() => live(all.rules), [all.rules])
+  const cash = useMemo(() => live(all.cash), [all.cash])
+  const statements = all.statements
 
   const spreadsheetId = 'spreadsheetId' in sync ? sync.spreadsheetId : null
 
-  /** Push the current state to the sheet. Safe to call when disconnected. */
-  const push = useCallback(
-    async (next?: Partial<Cache>) => {
-      const id = sheets.getSavedSpreadsheetId()
-      if (!id || !isSignedIn()) return
-      setSync({ status: 'syncing', spreadsheetId: id })
-      try {
-        await sheets.writeTransactions(id, next?.transactions ?? transactions)
-        await sheets.writeOrders(id, next?.orders ?? orders)
-        await sheets.writeRules(id, next?.rules ?? rules)
-        await sheets.writeCash(id, next?.cash ?? cash)
-        await sheets.writeStatements(id, next?.statements ?? statements)
-        setSync({ status: 'ready', spreadsheetId: id, lastSync: Date.now() })
-      } catch (error) {
-        setSync({ status: 'error', message: (error as Error).message })
-      }
-    },
-    [transactions, orders, rules, cash, statements],
-  )
-
-  /** Pull the sheet's contents over local state. */
-  const pull = useCallback(async () => {
+  /**
+   * Bring this device and the sheet together: read the sheet, merge it with
+   * what is here (the newer change to each row wins), keep the result, and write
+   * it back. Nothing either side holds alone is lost.
+   */
+  const exchange = useCallback(async (local: Full = latest.current) => {
     const id = sheets.getSavedSpreadsheetId()
-    if (!id) return
+    if (!id || !isSignedIn()) return
     setSync({ status: 'syncing', spreadsheetId: id })
     try {
       const [t, o, r, c, st] = await Promise.all([
-        // (statements are read last)
         sheets.readTransactions(id),
         sheets.readOrders(id),
         sheets.readRules(id),
         sheets.readCash(id),
         sheets.readStatements(id),
       ])
-      setTransactions(t)
-      setOrders(o)
-      // Cash is typed in by hand and exists nowhere else. If the sheet has none
-      // (an older sheet with no Cash tab), keep what is here and let the next
-      // push create the tab, rather than wiping it.
-      setCash((local) => (c.length ? c : local))
-      setStatements((local) => (st.length ? st : local))
-      // An empty Rules tab means a fresh sheet, so seed it with the defaults.
-      setRules(r.length ? r : defaultRules())
+      const merged: Full = {
+        transactions: mergeRows(local.transactions, t, idOf),
+        orders: mergeRows(local.orders, o, idOf),
+        rules: mergeRows(local.rules, r, idOf),
+        cash: mergeRows(local.cash, c, monthOf),
+        statements: mergeStatements(local.statements, st),
+      }
+      // A change made while this was running is merged in too, not overwritten.
+      const now = latest.current
+      const final: Full = {
+        transactions: mergeRows(now.transactions, merged.transactions, idOf),
+        orders: mergeRows(now.orders, merged.orders, idOf),
+        rules: mergeRows(now.rules, merged.rules, idOf),
+        cash: mergeRows(now.cash, merged.cash, monthOf),
+        statements: mergeStatements(now.statements, merged.statements),
+      }
+      setAll(final)
+      await sheets.writeTransactions(id, final.transactions)
+      await sheets.writeOrders(id, final.orders)
+      await sheets.writeRules(id, final.rules)
+      await sheets.writeCash(id, final.cash)
+      await sheets.writeStatements(id, final.statements)
       setSync({ status: 'ready', spreadsheetId: id, lastSync: Date.now() })
-      if (!r.length) await sheets.writeRules(id, defaultRules())
     } catch (error) {
       setSync({ status: 'error', message: (error as Error).message })
     }
@@ -130,25 +145,16 @@ export function useAppStore() {
       await signIn(true)
       let id = sheets.getSavedSpreadsheetId()
       if (!id) id = await sheets.findExistingSpreadsheet()
-      const isNew = !id
       if (!id) id = await sheets.createSpreadsheet()
       sheets.saveSpreadsheetId(id)
 
-      if (isNew) {
-        await sheets.writeRules(id, rules)
-        await sheets.writeTransactions(id, transactions)
-        await sheets.writeOrders(id, orders)
-        await sheets.writeCash(id, cash)
-        await sheets.writeStatements(id, statements)
-        setSync({ status: 'ready', spreadsheetId: id, lastSync: Date.now() })
-      } else {
-        setSync({ status: 'ready', spreadsheetId: id, lastSync: null })
-        await pull()
-      }
+      // Whether the sheet is new or has data, merge: a new one just receives everything.
+      setSync({ status: 'ready', spreadsheetId: id, lastSync: null })
+      await exchange()
     } catch (error) {
       setSync({ status: 'error', message: (error as Error).message })
     }
-  }, [rules, transactions, orders, cash, statements, pull])
+  }, [exchange])
 
   const disconnect = useCallback(() => {
     signOut()
@@ -163,7 +169,7 @@ export function useAppStore() {
     let cancelled = false
     signIn(false)
       .then(() => {
-        if (!cancelled) return pull()
+        if (!cancelled) return exchange()
       })
       .catch(() => {
         // The grant lapsed; the user can press Connect when they want to sync.
@@ -172,18 +178,25 @@ export function useAppStore() {
     return () => {
       cancelled = true
     }
-  }, [pull])
+  }, [exchange])
 
+  /** Replace some of the live lists; changes are stamped and removals marked, then synced. */
   const commit = useCallback(
     (next: Partial<Cache>) => {
-      if (next.transactions) setTransactions(next.transactions)
-      if (next.orders) setOrders(next.orders)
-      if (next.rules) setRules(next.rules)
-      if (next.cash) setCash(next.cash)
-      if (next.statements) setStatements(next.statements)
-      void push(next)
+      const now = Date.now()
+      const cur = latest.current
+      const updated: Full = {
+        transactions: next.transactions ? applyChange(cur.transactions, next.transactions, idOf, now) : cur.transactions,
+        orders: next.orders ? applyChange(cur.orders, next.orders, idOf, now) : cur.orders,
+        rules: next.rules ? applyChange(cur.rules, next.rules, idOf, now) : cur.rules,
+        cash: next.cash ? applyChange(cur.cash, next.cash, monthOf, now) : cur.cash,
+        statements: next.statements ? mergeStatements(next.statements, cur.statements) : cur.statements,
+      }
+      latest.current = updated
+      setAll(updated)
+      void exchange(updated)
     },
-    [push],
+    [exchange],
   )
 
   return {
@@ -197,8 +210,7 @@ export function useAppStore() {
     commit,
     connect,
     disconnect,
-    pull,
-    push,
+    syncNow: () => exchange(),
     googleConfigured: isConfigured(),
   }
 }

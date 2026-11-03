@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { formatMoney } from '../lib/money'
 import { ME, ownerOf, peopleFrom } from '../lib/people'
-import { cashByMonth, cashFor, currentMonth } from '../lib/cash'
+import { cashByMonth, cashFor, currentMonth, isMonth } from '../lib/cash'
 import { merchantLabel, netBy, totalsOf, withCashByMonth, withCashGroup } from '../lib/summary'
 import type { CashEntry, Transaction } from '../lib/types'
 import { BarChart, ColumnChart, type Datum } from './charts'
@@ -204,7 +204,7 @@ export function Summary({ transactions: all, cash, onCash }: SummaryProps) {
         </div>
       </div>
 
-      {includeCash && <CashPanel months={[...new Set([currentMonth(), ...all.map((t) => t.date.slice(0, 7))])].sort().reverse().slice(0, 6)} cash={cash} onCash={onCash} />}
+      {includeCash && <CashPanel cash={cash} onCash={onCash} />}
 
       <div className="card">
         <div className="card-head">
@@ -249,36 +249,64 @@ export function Summary({ transactions: all, cash, onCash }: SummaryProps) {
   )
 }
 
-/** One box per month for the cash moved to your cash account, entered at month end. */
-function CashPanel({ months, cash, onCash }: { months: string[]; cash: CashEntry[]; onCash: SummaryProps['onCash'] }) {
+/** Log the cash moved to your cash account for any month, and edit or clear earlier ones. */
+function CashPanel({ cash, onCash }: { cash: CashEntry[]; onCash: SummaryProps['onCash'] }) {
+  const [month, setMonth] = useState(currentMonth())
+  const [amount, setAmount] = useState('')
+  const valid = isMonth(month) && Number(amount) > 0
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <div className="card-head">
-        <h2>Cash for the month</h2>
-        <span className="small muted">Enter it at month end; counted as personal spending</span>
+        <h2>Cash</h2>
+        <span className="small muted">Cash moved to your cash account; counted as personal spending</span>
       </div>
-      <div className="row" style={{ flexWrap: 'wrap', gap: 12 }}>
-        {months.map((m) => (
-          <label key={m} className="small secondary">
-            {monthLabel(m)}{' '}
-            <input
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="any"
-              placeholder="0"
-              style={{ width: 96 }}
-              // Keyed by value so a restore or pull refreshes the box.
-              key={`${m}-${cashFor(cash, m)}`}
-              defaultValue={cashFor(cash, m) || ''}
-              onBlur={(e) => {
-                const v = e.target.value === '' ? null : Number(e.target.value)
-                if ((v ?? 0) !== cashFor(cash, m)) onCash(m, v)
-              }}
-            />
-          </label>
-        ))}
-      </div>
+      <form
+        className="row"
+        style={{ flexWrap: 'wrap', gap: 12 }}
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!valid) return
+          onCash(month, Number(amount))
+          setAmount('')
+        }}
+      >
+        <label className="small secondary">
+          Month <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+        </label>
+        <label className="small secondary">
+          Amount{' '}
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="any"
+            placeholder="15000"
+            style={{ width: 110 }}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+        </label>
+        <button type="submit" disabled={!valid}>
+          {cashFor(cash, month) ? 'Replace' : 'Add'}
+        </button>
+      </form>
+      {cash.length > 0 && (
+        <table style={{ marginTop: 12 }}>
+          <tbody>
+            {cash.map((c) => (
+              <tr key={c.month}>
+                <td>{monthLabel(c.month)}</td>
+                <td className="num">{formatMoney(c.amount)}</td>
+                <td className="num">
+                  <button type="button" onClick={() => onCash(c.month, null)}>
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   )
 }
